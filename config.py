@@ -111,10 +111,17 @@ class Config:
     @classmethod
     def validate(cls):
         """Проверка корректности конфигурации"""
+        print(f"🔍 Диагностика BOT_TOKEN:")
+        print(f"   Значение: '{cls.BOT_TOKEN}'")
+        print(f"   Тип: {type(cls.BOT_TOKEN)}")
+        print(f"   Длина: {len(cls.BOT_TOKEN) if cls.BOT_TOKEN else 0}")
+        
         if not cls.BOT_TOKEN:
             raise ValueError("BOT_TOKEN не установлен в переменных окружения")
         
-        if not cls.BOT_TOKEN.startswith('5'):
-            raise ValueError("Неверный формат BOT_TOKEN")
+        # Проверяем формат токена (должен содержать двоеточие и быть достаточно длинным)
+        if ':' not in cls.BOT_TOKEN or len(cls.BOT_TOKEN) < 20:
+            raise ValueError(f"Неверный формат BOT_TOKEN: должен содержать двоеточие и быть длиной минимум 20 символов")
         
+        print(f"✅ BOT_TOKEN прошел валидацию")
         return True
