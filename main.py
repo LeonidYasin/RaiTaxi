@@ -68,6 +68,10 @@ class RaiTaxiBot:
         # Регистрируем роутеры
         self._register_routers()
         
+        # Инициализируем операции с БД для обработчиков
+        from handlers.client import set_operations
+        set_operations(self.user_ops, self.order_ops)
+        
         # Регистрируем middleware
         self._register_middleware()
     
