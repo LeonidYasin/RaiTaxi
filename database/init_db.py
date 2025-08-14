@@ -100,7 +100,6 @@ def init_database():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 service_type TEXT NOT NULL,
                 base_fare REAL NOT NULL,
-                base_fare REAL NOT NULL,
                 per_km_rate REAL NOT NULL,
                 minimum_fare REAL NOT NULL,
                 is_active BOOLEAN DEFAULT 1,
