@@ -560,6 +560,7 @@ def get_cancel_keyboard():
     """Клавиатура с кнопкой отмены"""
     builder = InlineKeyboardBuilder()
     builder.button(text="❌ Отмена", callback_data="cancel_registration")
+    builder.button(text="🏠 Главное меню", callback_data="back_to_main")
     return builder.as_markup()
 
 def get_confirm_registration_keyboard():
@@ -567,12 +568,14 @@ def get_confirm_registration_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Подтвердить", callback_data="confirm_driver_registration")
     builder.button(text="❌ Отмена", callback_data="back_to_main")
+    builder.button(text="🏠 Главное меню", callback_data="back_to_main")
     return builder.as_markup()
 
 def get_back_to_driver_panel_keyboard():
     """Клавиатура возврата к панели водителя"""
     builder = InlineKeyboardBuilder()
     builder.button(text="⬅️ Назад к панели", callback_data="back_to_driver_panel")
+    builder.button(text="🏠 Главное меню", callback_data="back_to_main")
     return builder.as_markup()
 
 def get_main_menu_keyboard():

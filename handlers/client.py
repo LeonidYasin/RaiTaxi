@@ -57,18 +57,40 @@ async def start_command(message: Message):
             last_name=user.last_name
         )
     
+    # Проверяем, является ли пользователь водителем
+    user_db_id = await user_ops.get_user_id_by_telegram_id(user.id)
+    is_driver = False
+    if user_db_id:
+        from database.operations import DriverOperations
+        driver_ops = DriverOperations(user_ops.db_manager)
+        driver = await driver_ops.get_driver_by_user_id(user_db_id)
+        is_driver = driver is not None
+    
     # Создаем клавиатуру
     builder = InlineKeyboardBuilder()
     builder.button(text=Config.BUTTONS['taxi'], callback_data="order_taxi")
     builder.button(text=Config.BUTTONS['delivery'], callback_data="order_delivery")
     builder.button(text=Config.BUTTONS['my_orders'], callback_data="my_orders")
     builder.button(text=Config.BUTTONS['profile'], callback_data="profile")
+    
+    # Показываем кнопку "Стать водителем" только если пользователь еще не водитель
+    if not is_driver:
+        builder.button(text=Config.BUTTONS['become_driver'], callback_data="become_driver")
+    else:
+        builder.button(text=Config.BUTTONS['driver_panel'], callback_data="driver_panel")
+    
     builder.button(text=Config.BUTTONS['help'], callback_data="help")
     
-    builder.adjust(2, 2, 1)
+    builder.adjust(2, 2, 1, 1)
+    
+    # Выбираем сообщение в зависимости от статуса водителя
+    if is_driver:
+        welcome_message = Config.MESSAGES['welcome']
+    else:
+        welcome_message = Config.MESSAGES['welcome_with_driver_invite']
     
     await message.answer(
-        Config.MESSAGES['welcome'],
+        welcome_message,
         reply_markup=builder.as_markup()
     )
 
@@ -307,11 +329,80 @@ async def back_to_main(callback: CallbackQuery):
     """Возврат в главное меню"""
     await start_command(callback.message)
 
+@router.callback_query(F.data == "main_menu")
+async def main_menu_callback(callback: CallbackQuery):
+    """Возврат в главное меню"""
+    await start_command(callback.message)
+    await callback.answer()
+
+@router.callback_query(F.data == "become_driver")
+async def become_driver_callback(callback: CallbackQuery):
+    """Приглашение стать водителем"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Начать регистрацию", callback_data="start_driver_registration")
+    builder.button(text="📋 Узнать больше", callback_data="driver_info")
+    builder.button(text="🏠 Главное меню", callback_data="main_menu")
+    
+    builder.adjust(1, 1, 1)
+    
+    await callback.message.edit_text(
+        Config.MESSAGES['driver_invite'],
+        reply_markup=builder.as_markup()
+    )
+
+@router.callback_query(F.data == "driver_info")
+async def driver_info_callback(callback: CallbackQuery):
+    """Подробная информация о работе водителем"""
+    info_text = "🚗 Подробная информация о работе водителем\n\n"
+    info_text += "📋 Требования:\n"
+    info_text += "• Водительское удостоверение категории B\n"
+    info_text += "• Собственный автомобиль в исправном состоянии\n"
+    info_text += "• Страховка ОСАГО\n\n"
+    info_text += "💰 Доходы:\n"
+    info_text += "• 70-80% от стоимости заказа\n"
+    info_text += "• Без скрытых комиссий\n"
+    info_text += "• Выплаты каждый день\n\n"
+    info_text += "⏰ График:\n"
+    info_text += "• Работайте когда хотите\n"
+    info_text += "• Включайте/выключайте приложение\n"
+    info_text += "• Никаких обязательств\n\n"
+    info_text += "🎯 Территория:\n"
+    info_text += "• Работа в своем районе\n"
+    info_text += "• Знакомые маршруты\n"
+    info_text += "• Минимум времени в дороге"
+    
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Начать регистрацию", callback_data="start_driver_registration")
+    builder.button(text="⬅️ Назад", callback_data="become_driver")
+    builder.button(text="🏠 Главное меню", callback_data="main_menu")
+    
+    builder.adjust(1, 1, 1)
+    
+    await callback.message.edit_text(
+        info_text,
+        reply_markup=builder.as_markup()
+    )
+
+@router.callback_query(F.data == "driver_panel")
+async def driver_panel_callback(callback: CallbackQuery):
+    """Переход к панели водителя"""
+    from handlers.driver import driver_command
+    await driver_command(callback.message)
+    await callback.answer()
+
+@router.callback_query(F.data == "start_driver_registration")
+async def start_driver_registration_callback(callback: CallbackQuery):
+    """Переход к регистрации водителя"""
+    from handlers.driver import start_driver_registration
+    await start_driver_registration(callback, None)  # state будет установлен в driver.py
+    await callback.answer()
+
 # Вспомогательные функции для клавиатур
 def get_cancel_keyboard():
     """Клавиатура с кнопкой отмены"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="❌ Отмена", callback_data="cancel_order")
+    builder.button(text=Config.BUTTONS['cancel'], callback_data="cancel_order")
+    builder.button(text=Config.BUTTONS['main_menu'], callback_data="main_menu")
     return builder.as_markup()
 
 def get_location_keyboard():
@@ -322,19 +413,22 @@ def get_location_keyboard():
     return builder.as_markup()
 
 def get_confirm_keyboard():
-    """Клавиатура подтверждения заказа"""
+    """Клавиатура подтверждения"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Подтвердить", callback_data="confirm_order")
-    builder.button(text="❌ Отмена", callback_data="cancel_order")
+    builder.button(text=Config.BUTTONS['confirm'], callback_data="confirm_order")
+    builder.button(text=Config.BUTTONS['cancel'], callback_data="cancel_order")
+    builder.button(text=Config.BUTTONS['main_menu'], callback_data="main_menu")
+    return builder.as_markup()
+
+def get_back_keyboard():
+    """Клавиатура с кнопкой назад"""
+    builder = InlineKeyboardBuilder()
+    builder.button(text=Config.BUTTONS['back'], callback_data="back_to_order")
+    builder.button(text=Config.BUTTONS['main_menu'], callback_data="main_menu")
     return builder.as_markup()
 
 def get_main_menu_keyboard():
-    """Главное меню"""
+    """Клавиатура главного меню"""
     builder = InlineKeyboardBuilder()
-    builder.button(text=Config.BUTTONS['taxi'], callback_data="order_taxi")
-    builder.button(text=Config.BUTTONS['delivery'], callback_data="order_delivery")
-    builder.button(text=Config.BUTTONS['my_orders'], callback_data="my_orders")
-    builder.button(text=Config.BUTTONS['profile'], callback_data="profile")
-    builder.button(text=Config.BUTTONS['help'], callback_data="help")
-    builder.adjust(2, 2, 1)
+    builder.button(text=Config.BUTTONS['main_menu'], callback_data="main_menu")
     return builder.as_markup()

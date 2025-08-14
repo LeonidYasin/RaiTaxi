@@ -146,6 +146,7 @@ async def admin_users(callback: CallbackQuery):
         builder.button(text="🚫 Блокировка", callback_data="admin_block_user")
         builder.button(text="✅ Разблокировка", callback_data="admin_unblock_user")
         builder.button(text="⬅️ Назад", callback_data="back_to_admin_panel")
+        builder.button(text="🏠 Главное меню", callback_data="back_to_main")
         
         builder.adjust(2, 2, 1)
         
@@ -161,36 +162,30 @@ async def admin_users(callback: CallbackQuery):
 async def admin_drivers(callback: CallbackQuery):
     """Управление водителями"""
     try:
+        # Получаем список водителей
         drivers = await driver_ops.get_all_drivers() if driver_ops else []
         
-        if not drivers:
-            drivers_text = "🚗 Водители не найдены"
-        else:
-            drivers_text = "🚗 Зарегистрированные водители:\n\n"
-            for driver in drivers[:5]:  # Показываем первых 5
-                user = await user_ops.get_user_by_id(driver.user_id) if user_ops else None
-                user_name = f"{user.first_name} {user.last_name}" if user and user.last_name else (user.first_name if user else "Неизвестно")
-                
-                status_emoji = "🟢" if driver.is_available else "🔴"
-                status_text = "Доступен" if driver.is_available else "Недоступен"
-                
-                drivers_text += f"{status_emoji} {user_name}\n"
-                drivers_text += f"   🚙 {driver.car_model} ({driver.car_number})\n"
-                drivers_text += f"   📊 Статус: {status_text}\n"
-                drivers_text += f"   ⭐ Рейтинг: {driver.rating:.1f}\n"
-                drivers_text += f"   🚕 Поездок: {driver.total_trips}\n\n"
+        drivers_text = "🚗 Управление водителями\n\n"
+        drivers_text += f"📊 Всего водителей: {len(drivers)}\n\n"
+        
+        if drivers:
+            drivers_text += "👥 Список водителей:\n"
+            for driver in drivers[:10]:  # Показываем первые 10
+                drivers_text += f"• {driver.car_model} ({driver.car_number})\n"
+                drivers_text += f"  Статус: {'🟢 Онлайн' if driver.is_available else '🔴 Оффлайн'}\n"
+                drivers_text += f"  Рейтинг: {driver.rating:.1f}⭐\n\n"
             
-            if len(drivers) > 5:
-                drivers_text += f"... и еще {len(drivers) - 5} водителей\n\n"
+            if len(drivers) > 10:
+                drivers_text += f"... и еще {len(drivers) - 10} водителей\n\n"
+        else:
+            drivers_text += "📋 Водителей пока нет\n\n"
         
         drivers_text += "Выберите действие:"
         
         builder = InlineKeyboardBuilder()
-        builder.button(text="✅ Одобрить водителя", callback_data="admin_approve_driver")
-        builder.button(text="❌ Отклонить водителя", callback_data="admin_reject_driver")
-        builder.button(text="🚫 Блокировка водителя", callback_data="admin_block_driver")
         builder.button(text="📊 Статистика водителей", callback_data="admin_drivers_stats")
         builder.button(text="⬅️ Назад", callback_data="back_to_admin_panel")
+        builder.button(text="🏠 Главное меню", callback_data="back_to_main")
         
         builder.adjust(2, 2, 1)
         
@@ -206,39 +201,26 @@ async def admin_drivers(callback: CallbackQuery):
 async def admin_orders(callback: CallbackQuery):
     """Управление заказами"""
     try:
-        orders = await order_ops.get_recent_orders(limit=10) if order_ops else []
+        # Получаем статистику заказов
+        total_orders = await order_ops.get_total_orders() if order_ops else 0
+        active_orders = await order_ops.get_active_orders_count() if order_ops else 0
+        completed_orders = await order_ops.get_completed_orders_count() if order_ops else 0
         
-        if not orders:
-            orders_text = "📋 Заказы не найдены"
-        else:
-            orders_text = "📋 Последние заказы:\n\n"
-            for order in orders[:5]:  # Показываем первых 5
-                status_emoji = {
-                    'new': '🆕',
-                    'searching_driver': '🔍',
-                    'driver_assigned': '🚗',
-                    'in_progress': '🚀',
-                    'completed': '✅',
-                    'cancelled': '❌'
-                }.get(order.status, '❓')
-                
-                orders_text += f"{status_emoji} Заказ #{order.id}\n"
-                orders_text += f"   🚕 Тип: {'Такси' if order.order_type == 'taxi' else 'Доставка'}\n"
-                orders_text += f"   📊 Статус: {order.status}\n"
-                orders_text += f"   💰 Стоимость: {order.price:.0f} ₽\n"
-                orders_text += f"   📅 Создан: {order.created_at.strftime('%d.%m %H:%M') if order.created_at else 'Неизвестно'}\n\n"
-            
-            if len(orders) > 5:
-                orders_text += f"... и еще {len(orders) - 5} заказов\n\n"
+        orders_text = "📋 Управление заказами\n\n"
+        orders_text += f"📊 Всего заказов: {total_orders}\n"
+        orders_text += f"🔄 Активных: {active_orders}\n"
+        orders_text += f"✅ Завершенных: {completed_orders}\n\n"
+        
+        if total_orders > 0:
+            completion_rate = (completed_orders / total_orders) * 100
+            orders_text += f"📈 Процент завершения: {completion_rate:.1f}%\n\n"
         
         orders_text += "Выберите действие:"
         
         builder = InlineKeyboardBuilder()
-        builder.button(text="🔍 Поиск заказа", callback_data="admin_search_order")
-        builder.button(text="📊 Все заказы", callback_data="admin_all_orders")
-        builder.button(text="❌ Отмена заказа", callback_data="admin_cancel_order")
         builder.button(text="📈 Статистика заказов", callback_data="admin_orders_stats")
         builder.button(text="⬅️ Назад", callback_data="back_to_admin_panel")
+        builder.button(text="🏠 Главное меню", callback_data="back_to_main")
         
         builder.adjust(2, 2, 1)
         
@@ -269,8 +251,9 @@ async def admin_tariffs(callback: CallbackQuery):
     builder.button(text="📊 История изменений", callback_data="admin_tariff_history")
     builder.button(text="💡 Предложения", callback_data="admin_tariff_suggestions")
     builder.button(text="⬅️ Назад", callback_data="back_to_admin_panel")
+    builder.button(text="🏠 Главное меню", callback_data="back_to_main")
     
-    builder.adjust(2, 2)
+    builder.adjust(2, 2, 1)
     
     await callback.message.edit_text(
         tariffs_text,
@@ -282,23 +265,29 @@ async def admin_system(callback: CallbackQuery):
     """Системные настройки"""
     system_text = "⚙️ Системные настройки\n\n"
     system_text += "🔧 Основные параметры:\n"
-    system_text += f"   • Лимит запросов в минуту: {Config.MAX_REQUESTS_PER_MINUTE}\n"
-    system_text += f"   • Лимит запросов в час: {Config.MAX_REQUESTS_PER_HOUR}\n"
-    system_text += f"   • TTL кэша: {Config.CACHE_TTL} сек\n"
-    system_text += f"   • Максимальный размер кэша: {Config.MAX_CACHE_SIZE}\n\n"
-    system_text += "📱 Уведомления:\n"
-    system_text += f"   • Таймаут уведомлений: {Config.NOTIFICATION_TIMEOUT} сек\n"
-    system_text += f"   • Поиск водителя: {Config.DRIVER_SEARCH_TIMEOUT} сек\n\n"
-    system_text += "Выберите действие:"
+    system_text += "   • Лимиты запросов\n"
+    system_text += "   • Таймауты\n"
+    system_text += "   • Кэширование\n"
+    system_text += "   • Логирование\n\n"
+    system_text += "🛡️ Безопасность:\n"
+    system_text += "   • Антиспам\n"
+    system_text += "   • Фильтрация\n"
+    system_text += "   • Мониторинг\n\n"
+    system_text += "💾 База данных:\n"
+    system_text += "   • Резервное копирование\n"
+    system_text += "   • Оптимизация\n"
+    system_text += "   • Статистика\n\n"
+    system_text += "Выберите раздел:"
     
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔧 Изменить настройки", callback_data="admin_edit_system")
-    builder.button(text="🔄 Перезапуск бота", callback_data="admin_restart_bot")
-    builder.button(text="📊 Логи системы", callback_data="admin_system_logs")
+    builder.button(text="🔧 Основные настройки", callback_data="admin_system_main")
+    builder.button(text="🛡️ Безопасность", callback_data="admin_system_security")
+    builder.button(text="💾 База данных", callback_data="admin_system_database")
     builder.button(text="💾 Резервное копирование", callback_data="admin_backup")
     builder.button(text="⬅️ Назад", callback_data="back_to_admin_panel")
+    builder.button(text="🏠 Главное меню", callback_data="back_to_main")
     
-    builder.adjust(2, 2, 1)
+    builder.adjust(2, 2, 1, 1)
     
     await callback.message.edit_text(
         system_text,
@@ -336,8 +325,9 @@ async def admin_monitoring(callback: CallbackQuery):
         builder.button(text="📊 Детальный отчет", callback_data="admin_detailed_monitoring")
         builder.button(text="⚠️ Проверить ошибки", callback_data="admin_check_errors")
         builder.button(text="⬅️ Назад", callback_data="back_to_admin_panel")
+        builder.button(text="🏠 Главное меню", callback_data="back_to_main")
         
-        builder.adjust(2, 2)
+        builder.adjust(2, 2, 1)
         
         await callback.message.edit_text(
             monitoring_text,
@@ -367,8 +357,9 @@ async def admin_notifications(callback: CallbackQuery):
     builder.button(text="⚙️ Настройки уведомлений", callback_data="admin_notification_settings")
     builder.button(text="📋 История уведомлений", callback_data="admin_notification_history")
     builder.button(text="⬅️ Назад", callback_data="back_to_admin_panel")
+    builder.button(text="🏠 Главное меню", callback_data="back_to_main")
     
-    builder.adjust(2, 2)
+    builder.adjust(2, 2, 1)
     
     await callback.message.edit_text(
         notifications_text,
@@ -399,8 +390,9 @@ async def admin_reports(callback: CallbackQuery):
     builder.button(text="👥 По пользователям", callback_data="admin_users_report")
     builder.button(text="📊 Системный", callback_data="admin_system_report")
     builder.button(text="⬅️ Назад", callback_data="back_to_admin_panel")
+    builder.button(text="🏠 Главное меню", callback_data="back_to_main")
     
-    builder.adjust(2, 2, 2)
+    builder.adjust(2, 2, 2, 1)
     
     await callback.message.edit_text(
         reports_text,
@@ -429,6 +421,7 @@ def get_back_to_admin_panel_keyboard():
     """Клавиатура возврата к панели администратора"""
     builder = InlineKeyboardBuilder()
     builder.button(text="⬅️ Назад к панели", callback_data="back_to_admin_panel")
+    builder.button(text="🏠 Главное меню", callback_data="back_to_main")
     return builder.as_markup()
 
 def get_main_menu_keyboard():
