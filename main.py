@@ -15,9 +15,9 @@ from aiohttp import web
 from config import Config
 from database.models import DatabaseManager
 from database.operations import UserOperations, OrderOperations, DriverOperations
-from handlers.client import ClientHandlers, router as client_router
-from handlers.driver import DriverHandlers, router as driver_router
-from handlers.admin import AdminHandlers, router as admin_router
+from handlers.client import router as client_router
+from handlers.driver import router as driver_router
+from handlers.admin import router as admin_router
 from utils.rate_limiter import RateLimiter
 
 # Настройка логирования
@@ -56,11 +56,6 @@ class RaiTaxiBot:
         self.user_ops = UserOperations(self.db_manager)
         self.order_ops = OrderOperations(self.db_manager)
         self.driver_ops = DriverOperations(self.db_manager)
-        
-        # Инициализируем обработчики
-        self.client_handlers = ClientHandlers(self.user_ops, self.order_ops)
-        self.driver_handlers = DriverHandlers(self.user_ops, self.order_ops, self.driver_ops)
-        self.admin_handlers = AdminHandlers(self.user_ops, self.order_ops, self.driver_ops)
         
         # Инициализируем систему защиты от спама
         self.rate_limiter = RateLimiter()
