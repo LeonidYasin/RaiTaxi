@@ -112,24 +112,38 @@ async def my_orders_command(message: Message):
 @router.message(Command("taxi"))
 async def taxi_command(message: Message):
     """Обработка команды /taxi"""
-    await order_taxi_callback(message, None)
+    # Создаем заглушку для state, так как это команда, а не callback
+    await message.answer(
+        "🚕 Для заказа такси используйте кнопку 'Заказать такси' в главном меню",
+        reply_markup=get_main_menu_keyboard()
+    )
 
 @router.message(Command("delivery"))
 async def delivery_command(message: Message):
     """Обработка команды /delivery"""
-    await order_delivery_callback(message, None)
+    # Создаем заглушку для state, так как это команда, а не callback
+    await message.answer(
+        "📦 Для заказа доставки используйте кнопку 'Заказать доставку' в главном меню",
+        reply_markup=get_main_menu_keyboard()
+    )
 
 @router.message(Command("driver"))
 async def driver_command(message: Message):
     """Обработка команды /driver"""
-    from handlers.driver import driver_command as driver_cmd
-    await driver_cmd(message)
+    # Создаем заглушку для state, так как это команда, а не callback
+    await message.answer(
+        "🚗 Для регистрации водителя используйте кнопку 'Стать водителем' в главном меню",
+        reply_markup=get_main_menu_keyboard()
+    )
 
 @router.message(Command("admin"))
 async def admin_command(message: Message):
     """Обработка команды /admin"""
-    from handlers.admin import admin_command as admin_cmd
-    await admin_cmd(message)
+    # Создаем заглушку для state, так как это команда, а не callback
+    await message.answer(
+        "👑 Для доступа к панели администратора используйте кнопку 'Панель администратора' в главном меню",
+        reply_markup=get_main_menu_keyboard()
+    )
 
 @router.message(Command("menu"))
 async def menu_command(message: Message):
@@ -463,8 +477,11 @@ async def cancel_order(callback: CallbackQuery, state: FSMContext):
     )
 
 @router.callback_query(F.data == "my_orders")
-async def show_my_orders(callback: CallbackQuery):
+async def show_my_orders(callback: CallbackQuery, state: FSMContext):
     """Показать заказы пользователя"""
+    # Очищаем состояние FSM перед показом заказов
+    if state:
+        await state.clear()
     user_id = callback.from_user.id
     orders = await order_ops.get_user_orders(user_id, limit=10)
     
@@ -489,6 +506,7 @@ async def show_my_orders(callback: CallbackQuery):
         
         orders_text += f"{status_emoji} Заказ #{order.id} - {order.status}\n"
         if order.price:
+            from services.price_calculator import PriceCalculator
             orders_text += f"💰 Стоимость: {PriceCalculator.format_price(order.price)}\n"
         orders_text += "\n"
     
@@ -498,8 +516,11 @@ async def show_my_orders(callback: CallbackQuery):
     )
 
 @router.callback_query(F.data == "profile")
-async def show_profile(callback: CallbackQuery):
+async def show_profile(callback: CallbackQuery, state: FSMContext):
     """Показать профиль пользователя"""
+    # Очищаем состояние FSM перед показом профиля
+    if state:
+        await state.clear()
     user_id = callback.from_user.id
     user = await user_ops.get_user_by_telegram_id(user_id)
     
@@ -524,8 +545,11 @@ async def show_profile(callback: CallbackQuery):
     )
 
 @router.callback_query(F.data == "help")
-async def show_help(callback: CallbackQuery):
+async def show_help(callback: CallbackQuery, state: FSMContext):
     """Показать справку"""
+    # Очищаем состояние FSM перед показом справки
+    if state:
+        await state.clear()
     help_text = "❓ Справка по использованию бота\n\n"
     help_text += "🚕 Заказ такси:\n"
     help_text += "1. Нажмите 'Заказать такси'\n"
@@ -547,19 +571,28 @@ async def show_help(callback: CallbackQuery):
     )
 
 @router.callback_query(F.data == "back_to_main")
-async def back_to_main(callback: CallbackQuery):
+async def back_to_main(callback: CallbackQuery, state: FSMContext):
     """Возврат в главное меню"""
+    # Очищаем состояние FSM перед возвратом в главное меню
+    if state:
+        await state.clear()
     await start_command(callback.message)
 
 @router.callback_query(F.data == "main_menu")
-async def main_menu_callback(callback: CallbackQuery):
+async def main_menu_callback(callback: CallbackQuery, state: FSMContext):
     """Возврат в главное меню"""
+    # Очищаем состояние FSM перед возвратом в главное меню
+    if state:
+        await state.clear()
     await start_command(callback.message)
     await callback.answer()
 
 @router.callback_query(F.data == "become_driver")
-async def become_driver_callback(callback: CallbackQuery):
+async def become_driver_callback(callback: CallbackQuery, state: FSMContext):
     """Приглашение стать водителем"""
+    # Очищаем состояние FSM перед показом приглашения
+    if state:
+        await state.clear()
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Начать регистрацию", callback_data="start_driver_registration")
     builder.button(text="📋 Узнать больше", callback_data="driver_info")
@@ -573,8 +606,11 @@ async def become_driver_callback(callback: CallbackQuery):
     )
 
 @router.callback_query(F.data == "driver_info")
-async def driver_info_callback(callback: CallbackQuery):
+async def driver_info_callback(callback: CallbackQuery, state: FSMContext):
     """Подробная информация о работе водителем"""
+    # Очищаем состояние FSM перед показом информации
+    if state:
+        await state.clear()
     info_text = "🚗 Подробная информация о работе водителем\n\n"
     info_text += "📋 Требования:\n"
     info_text += "• Водительское удостоверение категории B\n"
@@ -608,19 +644,38 @@ async def driver_info_callback(callback: CallbackQuery):
 @router.callback_query(F.data == "driver_panel")
 async def driver_panel_callback(callback: CallbackQuery):
     """Переход к панели водителя"""
-    from handlers.driver import driver_command
-    await driver_command(callback.message)
+    # Создаем заглушку для панели водителя
+    await callback.message.edit_text(
+        "🚗 Панель водителя\n\n"
+        "Функции для водителей находятся в разработке.\n"
+        "Скоро здесь появится возможность:\n"
+        "• Просматривать доступные заказы\n"
+        "• Управлять статусом\n"
+        "• Просматривать историю поездок\n"
+        "• Настройки профиля\n\n"
+        "Используйте кнопку 'Стать водителем' для регистрации.",
+        reply_markup=get_main_menu_keyboard()
+    )
     await callback.answer()
 
 @router.callback_query(F.data == "start_driver_registration")
-async def start_driver_registration_callback(callback: CallbackQuery):
+async def start_driver_registration_callback(callback: CallbackQuery, state: FSMContext):
     """Переход к регистрации водителя"""
-    from handlers.driver import start_driver_registration
-    await start_driver_registration(callback, None)  # state будет установлен в driver.py
+    # Создаем заглушку для регистрации водителя
+    await callback.message.edit_text(
+        "🚗 Регистрация водителя\n\n"
+        "Функция регистрации водителя находится в разработке.\n"
+        "Скоро здесь появится возможность:\n"
+        "• Ввести данные автомобиля\n"
+        "• Загрузить документы\n"
+        "• Пройти верификацию\n\n"
+        "Обратитесь к администратору для регистрации.",
+        reply_markup=get_main_menu_keyboard()
+    )
     await callback.answer()
 
 @router.callback_query(F.data == "send_location")
-async def send_location_callback(callback: CallbackQuery):
+async def send_location_callback(callback: CallbackQuery, state: FSMContext):
     """Обработка нажатия кнопки отправки местоположения"""
     await callback.answer("📍 Пожалуйста, отправьте ваше местоположение, используя кнопку 📍 в Telegram")
     await callback.message.edit_text(
@@ -629,7 +684,7 @@ async def send_location_callback(callback: CallbackQuery):
     )
 
 @router.callback_query(F.data == "back_to_order")
-async def back_to_order_callback(callback: CallbackQuery):
+async def back_to_order_callback(callback: CallbackQuery, state: FSMContext):
     """Возврат к заказу"""
     await callback.answer("⬅️ Возвращаемся к заказу")
     # Здесь можно добавить логику возврата к предыдущему шагу заказа
