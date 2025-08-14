@@ -77,6 +77,54 @@ class UserOperations:
             ))
         
         return users
+    
+    async def get_recent_users(self, limit: int = 10) -> List[User]:
+        """Получение последних пользователей"""
+        query = '''
+            SELECT * FROM users 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        '''
+        cursor = await self.db.execute(query, (limit,))
+        users = []
+        
+        for row in cursor.fetchall():
+            users.append(User(
+                id=row['id'],
+                telegram_id=row['telegram_id'],
+                username=row['username'],
+                first_name=row['first_name'],
+                last_name=row['last_name'],
+                phone=row['phone'],
+                role=row['role'],
+                rating=row['rating'],
+                total_orders=row['total_orders'],
+                created_at=datetime.fromisoformat(row['created_at']),
+                is_active=bool(row['is_active'])
+            ))
+        
+        return users
+    
+    async def get_total_users(self) -> int:
+        """Получение общего количества пользователей"""
+        query = 'SELECT COUNT(*) as count FROM users'
+        cursor = await self.db.execute(query)
+        row = cursor.fetchone()
+        return row['count'] if row else 0
+    
+    async def get_user_id_by_telegram_id(self, telegram_id: int) -> Optional[int]:
+        """Получение ID пользователя по Telegram ID"""
+        query = 'SELECT id FROM users WHERE telegram_id = ?'
+        cursor = await self.db.execute(query, (telegram_id,))
+        row = cursor.fetchone()
+        return row['id'] if row else None
+    
+    async def make_admin(self, telegram_id: int) -> bool:
+        """Назначение пользователя администратором"""
+        query = 'UPDATE users SET role = "admin" WHERE telegram_id = ?'
+        await self.db.execute(query, (telegram_id,))
+        await self.db.commit()
+        return True
 
 class DriverOperations:
     """Операции с водителями"""
@@ -118,6 +166,51 @@ class DriverOperations:
                 created_at=datetime.fromisoformat(row['created_at'])
             )
         return None
+    
+    async def update_driver_availability(self, user_id: int, is_available: bool) -> bool:
+        """Обновление статуса доступности водителя"""
+        query = 'UPDATE drivers SET is_available = ? WHERE user_id = ?'
+        await self.db.execute(query, (is_available, user_id))
+        await self.db.commit()
+        return True
+    
+    async def get_all_drivers(self) -> List[Driver]:
+        """Получение всех водителей"""
+        query = 'SELECT * FROM drivers ORDER BY created_at DESC'
+        cursor = await self.db.execute(query)
+        drivers = []
+        
+        for row in cursor.fetchall():
+            drivers.append(Driver(
+                id=row['id'],
+                user_id=row['user_id'],
+                car_model=row['car_model'],
+                car_number=row['car_number'],
+                license_number=row['license_number'],
+                is_available=bool(row['is_available']),
+                current_location_lat=row['current_location_lat'],
+                current_location_lon=row['current_location_lon'],
+                rating=row['rating'],
+                total_trips=row['total_trips'],
+                total_earnings=row['total_earnings'],
+                created_at=datetime.fromisoformat(row['created_at'])
+            ))
+        
+        return drivers
+    
+    async def get_online_drivers_count(self) -> int:
+        """Получение количества онлайн водителей"""
+        query = 'SELECT COUNT(*) as count FROM drivers WHERE is_available = 1'
+        cursor = await self.db.execute(query)
+        row = cursor.fetchone()
+        return row['count'] if row else 0
+    
+    async def get_total_drivers(self) -> int:
+        """Получение общего количества водителей"""
+        query = 'SELECT COUNT(*) as count FROM drivers'
+        cursor = await self.db.execute(query)
+        row = cursor.fetchone()
+        return row['count'] if row else 0
     
     async def update_driver_location(self, user_id: int, lat: float, lon: float) -> bool:
         """Обновление местоположения водителя"""
@@ -301,3 +394,117 @@ class OrderOperations:
             ))
         
         return orders
+    
+    async def assign_driver_to_order(self, order_id: int, driver_id: int) -> bool:
+        """Назначение водителя на заказ (для водителей)"""
+        query = '''
+            UPDATE orders 
+            SET driver_id = ?, status = 'driver_assigned'
+            WHERE id = ? AND (status = 'new' OR status = 'searching_driver')
+        '''
+        cursor = await self.db.execute(query, (driver_id, order_id))
+        await self.db.commit()
+        return cursor.rowcount > 0
+    
+    async def get_driver_orders(self, driver_id: int, limit: int = 10) -> List[Order]:
+        """Получение заказов водителя"""
+        query = '''
+            SELECT * FROM orders 
+            WHERE driver_id = ? 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        '''
+        cursor = await self.db.execute(query, (driver_id, limit))
+        orders = []
+        
+        for row in cursor.fetchall():
+            orders.append(Order(
+                id=row['id'],
+                client_id=row['client_id'],
+                driver_id=row['driver_id'],
+                order_type=row['order_type'],
+                status=row['status'],
+                pickup_lat=row['pickup_lat'],
+                pickup_lon=row['pickup_lon'],
+                pickup_address=row['pickup_address'],
+                destination_lat=row['destination_lat'],
+                destination_lon=row['destination_lon'],
+                destination_address=row['destination_address'],
+                description=row['description'],
+                price=row['price'],
+                distance=row['distance'],
+                created_at=datetime.fromisoformat(row['created_at']),
+                completed_at=datetime.fromisoformat(row['completed_at']) if row['completed_at'] else None,
+                cancelled_at=datetime.fromisoformat(row['cancelled_at']) if row['cancelled_at'] else None,
+                cancellation_reason=row['cancellation_reason']
+            ))
+        
+        return orders
+    
+    async def get_recent_orders(self, limit: int = 10) -> List[Order]:
+        """Получение последних заказов"""
+        query = '''
+            SELECT * FROM orders 
+            ORDER BY created_at DESC 
+            LIMIT ?
+        '''
+        cursor = await self.db.execute(query, (limit,))
+        orders = []
+        
+        for row in cursor.fetchall():
+            orders.append(Order(
+                id=row['id'],
+                client_id=row['client_id'],
+                driver_id=row['driver_id'],
+                order_type=row['order_type'],
+                status=row['status'],
+                pickup_lat=row['pickup_lat'],
+                pickup_lon=row['pickup_lon'],
+                pickup_address=row['pickup_address'],
+                destination_lat=row['destination_lat'],
+                destination_lon=row['destination_lon'],
+                destination_address=row['destination_address'],
+                description=row['description'],
+                price=row['price'],
+                distance=row['distance'],
+                created_at=datetime.fromisoformat(row['created_at']),
+                completed_at=datetime.fromisoformat(row['completed_at']) if row['completed_at'] else None,
+                cancelled_at=datetime.fromisoformat(row['cancelled_at']) if row['cancelled_at'] else None,
+                cancellation_reason=row['cancellation_reason']
+            ))
+        
+        return orders
+    
+    async def get_total_orders(self) -> int:
+        """Получение общего количества заказов"""
+        query = 'SELECT COUNT(*) as count FROM orders'
+        cursor = await self.db.execute(query)
+        row = cursor.fetchone()
+        return row['count'] if row else 0
+    
+    async def get_active_orders_count(self) -> int:
+        """Получение количества активных заказов"""
+        query = '''
+            SELECT COUNT(*) as count FROM orders 
+            WHERE status IN ('new', 'searching_driver', 'driver_assigned', 'in_progress')
+        '''
+        cursor = await self.db.execute(query)
+        row = cursor.fetchone()
+        return row['count'] if row else 0
+    
+    async def get_completed_orders_count(self) -> int:
+        """Получение количества выполненных заказов"""
+        query = 'SELECT COUNT(*) as count FROM orders WHERE status = "completed"'
+        cursor = await self.db.execute(query)
+        row = cursor.fetchone()
+        return row['count'] if row else 0
+    
+    async def get_pending_orders_count(self) -> int:
+        """Получение количества ожидающих заказов"""
+        query = '''
+            SELECT COUNT(*) as count FROM orders 
+            WHERE status IN ('new', 'searching_driver')
+        '''
+        cursor = await self.db.execute(query)
+        row = cursor.fetchone()
+        return row['count'] if row else 0

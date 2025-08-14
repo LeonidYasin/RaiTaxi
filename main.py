@@ -67,6 +67,12 @@ class RaiTaxiBot:
         from handlers.client import set_operations
         set_operations(self.user_ops, self.order_ops)
         
+        from handlers.driver import set_operations as set_driver_operations
+        set_driver_operations(self.user_ops, self.order_ops, self.driver_ops)
+        
+        from handlers.admin import set_operations as set_admin_operations
+        set_admin_operations(self.user_ops, self.order_ops, self.driver_ops)
+        
         # Регистрируем middleware
         self._register_middleware()
     
