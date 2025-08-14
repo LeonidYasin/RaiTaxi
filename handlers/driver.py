@@ -10,6 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import Config
+from utils.validators import DataValidator
 
 router = Router()
 
@@ -55,13 +56,19 @@ async def driver_command(message: Message):
         
         # Проверяем, зарегистрирован ли водитель
         driver = await driver_ops.get_driver_by_user_id(user_db_id) if driver_ops else None
-    
-    if driver:
-        # Водитель уже зарегистрирован - показываем панель
-        await show_driver_panel(message, driver)
-    else:
-        # Водитель не зарегистрирован - предлагаем регистрацию
-        await show_driver_registration(message)
+        
+        if driver:
+            # Водитель уже зарегистрирован - показываем панель
+            await show_driver_panel(message, driver)
+        else:
+            # Водитель не зарегистрирован - предлагаем регистрацию
+            await show_driver_registration(message)
+            
+    except Exception as e:
+        await message.answer(
+            f"❌ Ошибка: {str(e)}",
+            reply_markup=get_main_menu_keyboard()
+        )
 
 async def show_driver_panel(message: Message, driver):
     """Показывает панель водителя"""
@@ -123,7 +130,26 @@ async def start_driver_registration(callback: CallbackQuery, state: FSMContext):
 @router.message(DriverRegistrationStates.waiting_for_car_model)
 async def handle_car_model(message: Message, state: FSMContext):
     """Обрабатывает ввод модели автомобиля"""
-    await state.update_data(car_model=message.text)
+    car_model = message.text.strip()
+    
+    # Простая валидация модели автомобиля
+    if len(car_model) < 3:
+        await message.answer(
+            "❌ Слишком короткое название модели\n"
+            "Введите полное название модели и марки автомобиля",
+            reply_markup=get_cancel_keyboard()
+        )
+        return
+    
+    if len(car_model) > 50:
+        await message.answer(
+            "❌ Слишком длинное название модели\n"
+            "Введите более короткое название",
+            reply_markup=get_cancel_keyboard()
+        )
+        return
+    
+    await state.update_data(car_model=car_model)
     await state.set_state(DriverRegistrationStates.waiting_for_car_number)
     
     await message.answer(
@@ -135,7 +161,19 @@ async def handle_car_model(message: Message, state: FSMContext):
 @router.message(DriverRegistrationStates.waiting_for_car_number)
 async def handle_car_number(message: Message, state: FSMContext):
     """Обрабатывает ввод номера автомобиля"""
-    await state.update_data(car_number=message.text)
+    car_number = message.text.strip().upper()
+    
+    # Валидация номера автомобиля
+    is_valid, error_msg = DataValidator.validate_car_number(car_number)
+    if not is_valid:
+        await message.answer(
+            f"❌ {error_msg}\n\n"
+            "Введите номер в формате: А123БВ77, М777ММ77",
+            reply_markup=get_cancel_keyboard()
+        )
+        return
+    
+    await state.update_data(car_number=car_number)
     await state.set_state(DriverRegistrationStates.waiting_for_license)
     
     await message.answer(
@@ -147,7 +185,26 @@ async def handle_car_number(message: Message, state: FSMContext):
 @router.message(DriverRegistrationStates.waiting_for_license)
 async def handle_license(message: Message, state: FSMContext):
     """Обрабатывает ввод номера водительского удостоверения"""
-    await state.update_data(license_number=message.text)
+    license_number = message.text.strip()
+    
+    # Простая валидация номера ВУ
+    if len(license_number) < 8:
+        await message.answer(
+            "❌ Слишком короткий номер ВУ\n"
+            "Введите полный номер водительского удостоверения",
+            reply_markup=get_cancel_keyboard()
+        )
+        return
+    
+    if len(license_number) > 20:
+        await message.answer(
+            "❌ Слишком длинный номер ВУ\n"
+            "Введите корректный номер",
+            reply_markup=get_cancel_keyboard()
+        )
+        return
+    
+    await state.update_data(license_number=license_number)
     await state.set_state(DriverRegistrationStates.confirming_registration)
     
     data = await state.get_data()
@@ -187,7 +244,7 @@ async def confirm_driver_registration(callback: CallbackQuery, state: FSMContext
         )
         
         if driver:
-            # Обновляем роль пользователя на 'driver'
+            # Обновляем роль пользователя на 'driver' (используем telegram_id)
             await user_ops.update_user_role(user_id, 'driver')
             
             await callback.message.edit_text(
@@ -213,51 +270,61 @@ async def confirm_driver_registration(callback: CallbackQuery, state: FSMContext
     
     await state.clear()
 
+@router.callback_query(F.data == "cancel_registration")
+async def cancel_registration(callback: CallbackQuery, state: FSMContext):
+    """Отменяет регистрацию водителя"""
+    await state.clear()
+    await callback.message.edit_text(
+        "❌ Регистрация отменена\n\n"
+        "Вы можете зарегистрироваться позже командой /driver",
+        reply_markup=get_main_menu_keyboard()
+    )
+
 @router.callback_query(F.data == "driver_online")
-    async def driver_online(callback: CallbackQuery):
-        """Делает водителя доступным"""
-        user_id = callback.from_user.id
+async def driver_online(callback: CallbackQuery):
+    """Делает водителя доступным"""
+    user_id = callback.from_user.id
+    
+    try:
+        # Получаем ID пользователя из БД
+        user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
         
-        try:
-            # Получаем ID пользователя из БД
-            user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
-            
-            if not user_db_id:
-                await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
-                return
-            
-            await driver_ops.update_driver_availability(user_db_id, True)
-            await callback.answer("🟢 Вы стали доступным для заказов!")
-            
-            # Обновляем сообщение
-            driver = await driver_ops.get_driver_by_user_id(user_db_id)
-            await show_driver_panel(callback.message, driver)
-            
-        except Exception as e:
-            await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+        if not user_db_id:
+            await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
+            return
+        
+        await driver_ops.update_driver_availability(user_db_id, True)
+        await callback.answer("🟢 Вы стали доступным для заказов!")
+        
+        # Обновляем сообщение
+        driver = await driver_ops.get_driver_by_user_id(user_db_id)
+        await show_driver_panel(callback.message, driver)
+        
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 @router.callback_query(F.data == "driver_offline")
-    async def driver_offline(callback: CallbackQuery):
-        """Делает водителя недоступным"""
-        user_id = callback.from_user.id
+async def driver_offline(callback: CallbackQuery):
+    """Делает водителя недоступным"""
+    user_id = callback.from_user.id
+    
+    try:
+        # Получаем ID пользователя из БД
+        user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
         
-        try:
-            # Получаем ID пользователя из БД
-            user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
-            
-            if not user_db_id:
-                await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
-                return
-            
-            await driver_ops.update_driver_availability(user_db_id, False)
-            await callback.answer("🔴 Вы стали недоступным для заказов!")
-            
-            # Обновляем сообщение
-            driver = await driver_ops.get_driver_by_user_id(user_db_id)
-            await show_driver_panel(callback.message, driver)
-            
-        except Exception as e:
-            await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+        if not user_db_id:
+            await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
+            return
+        
+        await driver_ops.update_driver_availability(user_db_id, False)
+        await callback.answer("🔴 Вы стали недоступным для заказов!")
+        
+        # Обновляем сообщение
+        driver = await driver_ops.get_driver_by_user_id(user_db_id)
+        await show_driver_panel(callback.message, driver)
+        
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 @router.callback_query(F.data == "view_available_orders")
 async def view_available_orders(callback: CallbackQuery):
@@ -307,21 +374,27 @@ async def view_available_orders(callback: CallbackQuery):
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 @router.callback_query(F.data.startswith("take_order_"))
-    async def take_order(callback: CallbackQuery):
-        """Принимает заказ"""
-        order_id = int(callback.data.split("_")[2])
+async def take_order(callback: CallbackQuery):
+    """Принимает заказ"""
+    try:
+        # Безопасное извлечение order_id
+        parts = callback.data.split("_")
+        if len(parts) != 3:
+            await callback.answer("❌ Ошибка: неверный формат данных", show_alert=True)
+            return
+            
+        order_id = int(parts[2])
         user_id = callback.from_user.id
         
-        try:
-            # Получаем ID пользователя из БД
-            user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
-            
-            if not user_db_id:
-                await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
-                return
-            
-            # Принимаем заказ
-            success = await order_ops.assign_driver_to_order(order_id, user_db_id)
+        # Получаем ID пользователя из БД
+        user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
+        
+        if not user_db_id:
+            await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
+            return
+        
+        # Принимаем заказ
+        success = await order_ops.assign_driver_to_order(order_id, user_db_id)
         
         if success:
             await callback.answer("✅ Заказ принят! Свяжитесь с клиентом.")
@@ -344,23 +417,25 @@ async def view_available_orders(callback: CallbackQuery):
         else:
             await callback.answer("❌ Заказ уже принят другим водителем", show_alert=True)
             
+    except ValueError:
+        await callback.answer("❌ Ошибка: неверный ID заказа", show_alert=True)
     except Exception as e:
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 @router.callback_query(F.data == "driver_my_orders")
-    async def driver_my_orders(callback: CallbackQuery):
-        """Показывает заказы водителя"""
-        user_id = callback.from_user.id
+async def driver_my_orders(callback: CallbackQuery):
+    """Показывает заказы водителя"""
+    user_id = callback.from_user.id
+    
+    try:
+        # Получаем ID пользователя из БД
+        user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
         
-        try:
-            # Получаем ID пользователя из БД
-            user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
-            
-            if not user_db_id:
-                await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
-                return
-            
-            orders = await order_ops.get_driver_orders(user_db_id, limit=10)
+        if not user_db_id:
+            await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
+            return
+        
+        orders = await order_ops.get_driver_orders(user_db_id, limit=10)
         
         if not orders:
             await callback.message.edit_text(
@@ -393,19 +468,19 @@ async def view_available_orders(callback: CallbackQuery):
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
 @router.callback_query(F.data == "driver_finances")
-    async def driver_finances(callback: CallbackQuery):
-        """Показывает финансовую информацию водителя"""
-        user_id = callback.from_user.id
+async def driver_finances(callback: CallbackQuery):
+    """Показывает финансовую информацию водителя"""
+    user_id = callback.from_user.id
+    
+    try:
+        # Получаем ID пользователя из БД
+        user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
         
-        try:
-            # Получаем ID пользователя из БД
-            user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
-            
-            if not user_db_id:
-                await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
-                return
-            
-            driver = await driver_ops.get_driver_by_user_id(user_db_id)
+        if not user_db_id:
+            await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
+            return
+        
+        driver = await driver_ops.get_driver_by_user_id(user_db_id)
         
         if not driver:
             await callback.answer("❌ Водитель не найден", show_alert=True)
@@ -443,28 +518,34 @@ async def driver_settings(callback: CallbackQuery):
     )
 
 @router.callback_query(F.data == "back_to_driver_panel")
-    async def back_to_driver_panel(callback: CallbackQuery):
-        """Возврат к панели водителя"""
-        user_id = callback.from_user.id
-        
-        try:
-            # Получаем ID пользователя из БД
-            user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
-            
-            if not user_db_id:
-                await callback.message.edit_text(
-                    "❌ Ошибка: пользователь не найден",
-                    reply_markup=get_main_menu_keyboard()
-                )
-                return
-            
-            driver = await driver_ops.get_driver_by_user_id(user_db_id) if driver_ops else None
+async def back_to_driver_panel(callback: CallbackQuery):
+    """Возврат к панели водителя"""
+    user_id = callback.from_user.id
     
-    if driver:
-        await show_driver_panel(callback.message, driver)
-    else:
+    try:
+        # Получаем ID пользователя из БД
+        user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
+        
+        if not user_db_id:
+            await callback.message.edit_text(
+                "❌ Ошибка: пользователь не найден",
+                reply_markup=get_main_menu_keyboard()
+            )
+            return
+        
+        driver = await driver_ops.get_driver_by_user_id(user_db_id) if driver_ops else None
+        
+        if driver:
+            await show_driver_panel(callback.message, driver)
+        else:
+            await callback.message.edit_text(
+                "❌ Ошибка: водитель не найден",
+                reply_markup=get_main_menu_keyboard()
+            )
+            
+    except Exception as e:
         await callback.message.edit_text(
-            "❌ Ошибка: водитель не найден",
+            f"❌ Ошибка: {str(e)}",
             reply_markup=get_main_menu_keyboard()
         )
 
@@ -478,7 +559,7 @@ async def back_to_main(callback: CallbackQuery):
 def get_cancel_keyboard():
     """Клавиатура с кнопкой отмены"""
     builder = InlineKeyboardBuilder()
-    builder.button(text="❌ Отмена", callback_data="back_to_main")
+    builder.button(text="❌ Отмена", callback_data="cancel_registration")
     return builder.as_markup()
 
 def get_confirm_registration_keyboard():
