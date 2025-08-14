@@ -2,12 +2,13 @@
 Обработчики команд для Рай-Такси
 """
 
-from .client import ClientHandlers
-from .driver import DriverHandlers
-from .admin import AdminHandlers
+# Импортируем только роутеры
+from .client import router as client_router
+from .driver import router as driver_router
+from .admin import router as admin_router
 
 __all__ = [
-    'ClientHandlers',
-    'DriverHandlers',
-    'AdminHandlers'
+    'client_router',
+    'driver_router',
+    'admin_router'
 ]
