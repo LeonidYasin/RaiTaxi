@@ -62,7 +62,7 @@ async def start_command(message: Message):
     is_driver = False
     if user_db_id:
         from database.operations import DriverOperations
-        driver_ops = DriverOperations(user_ops.db_manager)
+        driver_ops = DriverOperations(user_ops.db)
         driver = await driver_ops.get_driver_by_user_id(user_db_id)
         is_driver = driver is not None
     
@@ -93,6 +93,228 @@ async def start_command(message: Message):
         welcome_message,
         reply_markup=builder.as_markup()
     )
+
+@router.message(Command("help"))
+async def help_command(message: Message):
+    """Обработка команды /help"""
+    await show_help(message)
+
+@router.message(Command("profile"))
+async def profile_command(message: Message):
+    """Обработка команды /profile"""
+    await show_profile(message)
+
+@router.message(Command("my_orders"))
+async def my_orders_command(message: Message):
+    """Обработка команды /my_orders"""
+    await show_my_orders(message)
+
+@router.message(Command("taxi"))
+async def taxi_command(message: Message):
+    """Обработка команды /taxi"""
+    await order_taxi_callback(message, None)
+
+@router.message(Command("delivery"))
+async def delivery_command(message: Message):
+    """Обработка команды /delivery"""
+    await order_delivery_callback(message, None)
+
+@router.message(Command("driver"))
+async def driver_command(message: Message):
+    """Обработка команды /driver"""
+    from handlers.driver import driver_command as driver_cmd
+    await driver_cmd(message)
+
+@router.message(Command("admin"))
+async def admin_command(message: Message):
+    """Обработка команды /admin"""
+    from handlers.admin import admin_command as admin_cmd
+    await admin_cmd(message)
+
+@router.message(Command("menu"))
+async def menu_command(message: Message):
+    """Обработка команды /menu - возврат в главное меню"""
+    await start_command(message)
+
+@router.message(Command("info"))
+async def info_command(message: Message):
+    """Обработка команды /info - информация о боте"""
+    info_text = "🚗 Рай-Такси - Ваш соседский водитель!\n\n"
+    info_text += "✨ Особенности:\n"
+    info_text += "• 🚕 Быстрое такси по району\n"
+    info_text += "• 📦 Доставка продуктов и лекарств\n"
+    info_text += "• 🏠 Работаем в вашем районе\n"
+    info_text += "• 💰 Прозрачные цены\n"
+    info_text += "• ⭐ Надежные водители\n\n"
+    info_text += "📱 Команды:\n"
+    info_text += "• /start - Главное меню\n"
+    info_text += "• /taxi - Заказать такси\n"
+    info_text += "• /delivery - Заказать доставку\n"
+    info_text += "• /driver - Стать водителем\n"
+    info_text += "• /help - Справка\n"
+    info_text += "• /menu - Главное меню\n\n"
+    info_text += "💡 Для заказа используйте кнопки в главном меню!"
+    
+    await message.answer(info_text, reply_markup=get_main_menu_keyboard())
+
+@router.message(Command("about"))
+async def about_command(message: Message):
+    """Обработка команды /about - о проекте"""
+    about_text = "🚗 О проекте Рай-Такси\n\n"
+    about_text += "🎯 Миссия:\n"
+    about_text += "Создать удобный сервис такси и доставки для малых городов России\n\n"
+    about_text += "💡 Философия:\n"
+    about_text += "• 🏠 Соседский подход\n"
+    about_text += "• 🚗 Комфорт важнее скорости\n"
+    about_text += "• 💰 Справедливые цены\n"
+    about_text += "• ⭐ Надежность и качество\n\n"
+    about_text += "🌍 Территория:\n"
+    about_text += "Работаем в малых городах и поселках России\n\n"
+    about_text += "📱 Технологии:\n"
+    about_text += "• Telegram Bot API\n"
+    about_text += "• Python + SQLite\n"
+    about_text += "• Локальный сервер\n"
+    about_text += "• Без облачных зависимостей\n\n"
+    about_text += "🔄 Версия: 1.0.0\n"
+    about_text += "📅 2025 год"
+    
+    await message.answer(about_text, reply_markup=get_main_menu_keyboard())
+
+@router.message(Command("support"))
+async def support_command(message: Message):
+    """Обработка команды /support - поддержка"""
+    support_text = "🆘 Поддержка Рай-Такси\n\n"
+    support_text += "📞 Способы связи:\n"
+    support_text += "• 💬 Telegram: @admin_username\n"
+    support_text += "• 📧 Email: support@raitaxi.ru\n"
+    support_text += "• 📱 Телефон: +7 (XXX) XXX-XX-XX\n\n"
+    support_text += "❓ Частые вопросы:\n"
+    support_text += "• Как заказать такси? - /help\n"
+    support_text += "• Как стать водителем? - /driver\n"
+    support_text += "• Где работает сервис? - /info\n\n"
+    support_text += "🚨 Экстренная помощь:\n"
+    support_text += "• Проблемы с заказом\n"
+    support_text += "• Жалобы на водителя\n"
+    support_text += "• Технические сбои\n\n"
+    support_text += "⏰ Время работы:\n"
+    support_text += "• Пн-Вс: 24/7\n"
+    support_text += "• Ответ в течение 1 часа"
+    
+    await message.answer(support_text, reply_markup=get_main_menu_keyboard())
+
+@router.message(Command("status"))
+async def status_command(message: Message):
+    """Обработка команды /status - статус системы"""
+    try:
+        # Получаем базовую статистику
+        total_users = await user_ops.get_total_users() if user_ops else 0
+        total_drivers = 0
+        if user_ops:
+            from database.operations import DriverOperations
+            driver_ops = DriverOperations(user_ops.db)
+            total_drivers = await driver_ops.get_total_drivers()
+        
+        status_text = "📊 Статус системы Рай-Такси\n\n"
+        status_text += "🟢 Система работает\n"
+        status_text += f"👥 Пользователей: {total_users}\n"
+        status_text += f"🚗 Водителей: {total_drivers}\n"
+        status_text += "🕐 Время: " + get_current_time() + "\n\n"
+        status_text += "💻 Сервер: Android (Termux)\n"
+        status_text += "🗄️ База данных: SQLite\n"
+        status_text += "🌐 Интернет: Активно\n"
+        status_text += "🔒 Безопасность: Включена\n\n"
+        status_text += "✅ Все сервисы работают нормально"
+        
+        await message.answer(status_text, reply_markup=get_main_menu_keyboard())
+        
+    except Exception as e:
+        await message.answer(
+            f"❌ Ошибка получения статуса: {str(e)}",
+            reply_markup=get_main_menu_keyboard()
+        )
+
+# Вспомогательные функции
+def get_current_time():
+    """Возвращает текущее время в читаемом формате"""
+    from datetime import datetime
+    now = datetime.now()
+    return now.strftime("%d.%m.%Y %H:%M:%S")
+
+async def show_help(message: Message):
+    """Показать справку"""
+    help_text = "❓ Справка по использованию бота\n\n"
+    help_text += "🚕 Заказ такси:\n"
+    help_text += "1. Нажмите 'Заказать такси'\n"
+    help_text += "2. Отправьте ваше местоположение\n"
+    help_text += "3. Отправьте место назначения\n"
+    help_text += "4. Подтвердите заказ\n\n"
+    help_text += "📦 Заказ доставки:\n"
+    help_text += "1. Нажмите 'Заказать доставку'\n"
+    help_text += "2. Опишите что нужно доставить\n"
+    help_text += "3. Укажите адреса\n"
+    help_text += "4. Подтвердите заказ\n\n"
+    help_text += "📋 Мои заказы - просмотр истории заказов\n"
+    help_text += "👤 Профиль - информация о вас\n\n"
+    help_text += "💡 Для отправки местоположения используйте кнопку 📍"
+    
+    await message.answer(help_text, reply_markup=get_main_menu_keyboard())
+
+async def show_profile(message: Message):
+    """Показать профиль пользователя"""
+    user_id = message.from_user.id
+    user = await user_ops.get_user_by_telegram_id(user_id) if user_ops else None
+    
+    if not user:
+        await message.answer(
+            "❌ Пользователь не найден",
+            reply_markup=get_main_menu_keyboard()
+        )
+        return
+    
+    profile_text = f"👤 Профиль пользователя\n\n"
+    profile_text += f"🆔 ID: {user.telegram_id}\n"
+    profile_text += f"👤 Имя: {user.first_name}\n"
+    if user.last_name:
+        profile_text += f"📝 Фамилия: {user.last_name}\n"
+    if user.username:
+        profile_text += f"🔗 Username: @{user.username}\n"
+    profile_text += f"⭐ Рейтинг: {user.rating:.1f}\n"
+    profile_text += f"📦 Всего заказов: {user.total_orders}\n"
+    profile_text += f"📅 Дата регистрации: {user.created_at.strftime('%d.%m.%Y') if user.created_at else 'Неизвестно'}"
+    
+    await message.answer(profile_text, reply_markup=get_main_menu_keyboard())
+
+async def show_my_orders(message: Message):
+    """Показать заказы пользователя"""
+    user_id = message.from_user.id
+    orders = await order_ops.get_user_orders(user_id, limit=10) if order_ops else []
+    
+    if not orders:
+        await message.answer(
+            "📋 У вас пока нет заказов.",
+            reply_markup=get_main_menu_keyboard()
+        )
+        return
+    
+    # Формируем список заказов
+    orders_text = "📋 Ваши последние заказы:\n\n"
+    for order in orders:
+        status_emoji = {
+            'new': '🆕',
+            'searching_driver': '🔍',
+            'driver_assigned': '🚗',
+            'in_progress': '🚀',
+            'completed': '✅',
+            'cancelled': '❌'
+        }.get(order.status, '❓')
+        
+        orders_text += f"{status_emoji} Заказ #{order.id} - {order.status}\n"
+        if order.price:
+            from services.price_calculator import PriceCalculator
+            orders_text += f"💰 Стоимость: {PriceCalculator.format_price(order.price)}\n"
+        orders_text += "\n"
+    
+    await message.answer(orders_text, reply_markup=get_main_menu_keyboard())
 
 @router.callback_query(F.data == "order_taxi")
 async def order_taxi_callback(callback: CallbackQuery, state: FSMContext):
@@ -397,6 +619,25 @@ async def start_driver_registration_callback(callback: CallbackQuery):
     await start_driver_registration(callback, None)  # state будет установлен в driver.py
     await callback.answer()
 
+@router.callback_query(F.data == "send_location")
+async def send_location_callback(callback: CallbackQuery):
+    """Обработка нажатия кнопки отправки местоположения"""
+    await callback.answer("📍 Пожалуйста, отправьте ваше местоположение, используя кнопку 📍 в Telegram")
+    await callback.message.edit_text(
+        "📍 Пожалуйста, отправьте ваше местоположение, используя кнопку 📍 в Telegram",
+        reply_markup=get_cancel_keyboard()
+    )
+
+@router.callback_query(F.data == "back_to_order")
+async def back_to_order_callback(callback: CallbackQuery):
+    """Возврат к заказу"""
+    await callback.answer("⬅️ Возвращаемся к заказу")
+    # Здесь можно добавить логику возврата к предыдущему шагу заказа
+    await callback.message.edit_text(
+        "⬅️ Возвращаемся к заказу...",
+        reply_markup=get_cancel_keyboard()
+    )
+
 # Вспомогательные функции для клавиатур
 def get_cancel_keyboard():
     """Клавиатура с кнопкой отмены"""
@@ -410,6 +651,7 @@ def get_location_keyboard():
     builder = InlineKeyboardBuilder()
     builder.button(text="📍 Отправить местоположение", callback_data="send_location")
     builder.button(text="❌ Отмена", callback_data="cancel_order")
+    builder.button(text=Config.BUTTONS['main_menu'], callback_data="main_menu")
     return builder.as_markup()
 
 def get_confirm_keyboard():
