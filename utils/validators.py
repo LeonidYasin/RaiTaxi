@@ -68,13 +68,22 @@ class DataValidator:
         if not car_number:
             return False, "Номер автомобиля не может быть пустым"
         
-        # Простая проверка формата (буква-цифра-цифра-буква-буква)
-        pattern = r'^[АВЕКМНОРСТУХ]\d{3}[АВЕКМНОРСТУХ]{2}$'
+        # Убираем пробелы и приводим к верхнему регистру
+        car_number = car_number.strip().upper()
         
-        if not re.match(pattern, car_number.upper()):
-            return False, "Неверный формат номера автомобиля"
+        # Проверяем несколько форматов российских номеров
+        patterns = [
+            r'^[АВЕКМНОРСТУХ]\d{3}[АВЕКМНОРСТУХ]{2}\d{2,3}$',  # А123БВ77, М777ММ77
+            r'^[АВЕКМНОРСТУХ]\d{2}[АВЕКМНОРСТУХ]{2}\d{2,3}$',  # А12БВ77, М77ММ77
+            r'^\d{3}[АВЕКМНОРСТУХ]{2}\d{2,3}$',  # 123БВ77, 777ММ77
+            r'^[АВЕКМНОРСТУХ]{2}\d{3}\d{2,3}$',  # АБ12377, ММ77777
+        ]
         
-        return True, ""
+        for pattern in patterns:
+            if re.match(pattern, car_number):
+                return True, ""
+        
+        return False, "Неверный формат номера автомобиля. Примеры: А123БВ77, М777ММ77, 123БВ77"
     
     @staticmethod
     def validate_price(price: float) -> Tuple[bool, str]:
