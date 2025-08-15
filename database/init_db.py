@@ -65,7 +65,7 @@ def init_database():
                 status TEXT NOT NULL,
                 pickup_lat REAL NOT NULL,
                 pickup_lon REAL NOT NULL,
-                pickup_address TEXT NOT NULL,
+                pickup_address TEXT,
                 destination_lat REAL,
                 destination_lon REAL,
                 destination_address TEXT,

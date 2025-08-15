@@ -56,7 +56,7 @@ class Order:
     status: str
     pickup_lat: float
     pickup_lon: float
-    pickup_address: str
+    pickup_address: Optional[str]
     destination_lat: Optional[float]
     destination_lon: Optional[float]
     destination_address: Optional[str]

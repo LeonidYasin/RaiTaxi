@@ -258,9 +258,9 @@ class OrderOperations:
         self.db = db_manager
     
     async def create_order(self, client_id: int, order_type: str, pickup_lat: float,
-                          pickup_lon: float, pickup_address: str, 
+                          pickup_lon: float, pickup_address: Optional[str],
                           destination_lat: float = None, destination_lon: float = None,
-                          destination_address: str = None, description: str = None,
+                          destination_address: Optional[str] = None, description: str = None,
                           price: float = 0.0, distance: float = None) -> Order:
         """Создание нового заказа"""
         query = '''

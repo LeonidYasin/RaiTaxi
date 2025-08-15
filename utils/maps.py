@@ -54,6 +54,36 @@ class MapService:
         except ValueError as e:
             print(f"Ошибка парсинга ответа геокодера: {e}")
             return None
+
+    def reverse_geocode_coords(self, lat: float, lon: float) -> Optional[str]:
+        """
+        Обратное геокодирование координат (преобразование координат в адрес)
+        Использует Nominatim OpenStreetMap API.
+        """
+        nominatim_url = "https://nominatim.openstreetmap.org/reverse"
+        params = {
+            'lat': lat,
+            'lon': lon,
+            'format': 'json',
+            'zoom': 18, # Уровень детализации адреса
+            'addressdetails': 1
+        }
+        headers = {
+            'User-Agent': 'RaiTaxiBot/1.0 (https://github.com/your-username/raitaxi)'
+        }
+        try:
+            response = requests.get(nominatim_url, params=params, headers=headers, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            if data and 'display_name' in data:
+                return data['display_name']
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"Ошибка обратного геокодирования координат ({lat}, {lon}): {e}")
+            return None
+        except ValueError as e:
+            print(f"Ошибка парсинга ответа обратного геокодера: {e}")
+            return None
     
     def get_static_map(self, center_lat: float, center_lon: float,
                        markers: list = None, routes: list = None) -> Optional[bytes]:
@@ -91,12 +121,13 @@ class MapService:
             
             # Добавляем маршруты (если поддерживаются)
             if routes:
-                route_params = []
-                for lat1, lon1, lat2, lon2 in routes:
-                    route_str = f"{lat1},{lon1},{lat2},{lon2}"
-                    route_params.append(route_str)
-                
-                params['routes'] = route_params
+                # OSM Static Maps API doesn't directly support drawing routes via a 'routes' parameter
+                # This would typically require a routing service (e.g., OSRM, GraphHopper)
+                # and then drawing the polyline on the map.
+                # For simplicity, we'll just add markers for start/end of route for now.
+                # A more advanced implementation would fetch polyline data and add it as an overlay.
+                print("Warning: 'routes' parameter is not directly supported by staticmap.openstreetmap.de for drawing polylines.")
+                print("Consider using a routing service and drawing the polyline as an overlay.")
             
             # Выполняем запрос
             response = requests.get(self.base_url, params=params, timeout=10)
@@ -122,14 +153,15 @@ class MapService:
         Returns:
             Изображение карты в формате bytes
         """
-        # Определяем центр карты
+        # Определяем центр карты и оптимальный зум
         if destination_lat and destination_lon:
-            # Центр между точками отправления и назначения
             center_lat = (pickup_lat + destination_lat) / 2
             center_lon = (pickup_lon + destination_lon) / 2
+            self.zoom = self.calculate_optimal_zoom(pickup_lat, pickup_lon, destination_lat, destination_lon)
         else:
             center_lat, center_lon = pickup_lat, pickup_lon
-        
+            self.zoom = Config.MAP_ZOOM # Reset to default if only one point
+
         # Формируем маркеры
         markers = [
             (pickup_lat, pickup_lon, 'red', 'A'),  # Точка отправления
@@ -146,7 +178,7 @@ class MapService:
         
         if map_data:
             # Добавляем дополнительную информацию на карту
-            return self.add_map_overlay(map_data, pickup_lat, pickup_lon, 
+            return self.add_map_overlay(map_data, pickup_lat, pickup_lon,
                                       destination_lat, destination_lon)
         
         return map_data
@@ -213,7 +245,7 @@ class MapService:
         return f"{self.base_url}?center={lat},{lon}&zoom={zoom}&size={self.width}x{self.height}&maptype=mapnik"
     
     def calculate_optimal_zoom(self, pickup_lat: float, pickup_lon: float,
-                              destination_lat: float = None, destination_lon: float = None) -> int:
+                               destination_lat: float = None, destination_lon: float = None) -> int:
         """
         Расчет оптимального уровня зума для отображения маршрута
         

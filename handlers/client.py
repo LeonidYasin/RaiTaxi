@@ -378,9 +378,13 @@ async def handle_pickup_location(message: Message, state: FSMContext):
     """Обработка местоположения отправления"""
     location = message.location
     
+    map_service = MapService()
+    pickup_address = map_service.reverse_geocode_coords(location.latitude, location.longitude)
+    
     await state.update_data(
         pickup_lat=location.latitude,
-        pickup_lon=location.longitude
+        pickup_lon=location.longitude,
+        pickup_address=pickup_address if pickup_address else "Неизвестный адрес"
     )
     
     await state.set_state(TaxiOrderStates.waiting_for_destination)
@@ -445,6 +449,9 @@ async def handle_destination_location(message: Message, state: FSMContext):
         await state.clear()
         return
     
+    map_service = MapService()
+    destination_address = map_service.reverse_geocode_coords(location.latitude, location.longitude)
+    
     # Рассчитываем расстояние и цену
     distance = PriceCalculator.calculate_distance(
         pickup_lat, pickup_lon,
@@ -457,6 +464,7 @@ async def handle_destination_location(message: Message, state: FSMContext):
     await state.update_data(
         destination_lat=location.latitude,
         destination_lon=location.longitude,
+        destination_address=destination_address if destination_address else "Неизвестный адрес",
         distance=distance,
         price=price
     )
@@ -467,13 +475,13 @@ async def handle_destination_location(message: Message, state: FSMContext):
     map_service = MapService()
     map_data = map_service.create_simple_map(
         data['pickup_lat'], data['pickup_lon'],
-        destination_lat, destination_lon
+        location.latitude, location.longitude # Use location.latitude, location.longitude here
     )
 
     confirmation_text = (
         f"🚕 Подтвердите заказ такси:\n\n"
         f"📍 Откуда: {data.get('pickup_address', 'Указанное местоположение')}\n"
-        f"🎯 Куда: {destination_address}\n"
+        f"🎯 Куда: {destination_address if destination_address else 'Указанное местоположение'}\n"
         f"📏 Расстояние: {PriceCalculator.format_distance(distance)}\n"
         f"💰 Стоимость: {PriceCalculator.format_price(price)}"
     )
