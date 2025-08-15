@@ -418,17 +418,17 @@ async def handle_pickup_address(message: Message, state: FSMContext):
                 Config.MESSAGES['destination_needed'],
                 reply_markup=get_cancel_keyboard()
             )
-        else:
-            print(f"DEBUG: Geocoding failed for pickup address: '{message.text}'") # Add debug print
-            await state.update_data(pickup_address="Неизвестно") # Ensure pickup_address is always set
-            await message.answer(
-                "❌ Не удалось определить местоположение по адресу отправления. Пожалуйста, попробуйте еще раз, введя более точный адрес, или отправьте ваше местоположение с помощью кнопки.",
-                reply_markup=get_location_keyboard()
-            )
-            await message.answer(
-                "Или отмените заказ:",
-                reply_markup=get_cancel_keyboard()
-            )
+    else:
+        print(f"DEBUG: Geocoding failed for pickup address: '{message.text}'") # Add debug print
+        await state.update_data(pickup_address="Неизвестно") # Ensure pickup_address is always set
+        await message.answer(
+            "❌ Не удалось определить местоположение по адресу отправления. Пожалуйста, попробуйте еще раз, введя более точный адрес, или отправьте ваше местоположение с помощью кнопки.",
+            reply_markup=get_location_keyboard()
+        )
+        await message.answer(
+            "Или отмените заказ:",
+            reply_markup=get_cancel_keyboard()
+        )
 
 @router.message(TaxiOrderStates.waiting_for_destination, F.location)
 async def handle_destination_location(message: Message, state: FSMContext):
