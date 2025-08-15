@@ -390,8 +390,12 @@ async def handle_pickup_address(message: Message, state: FSMContext):
     """Обработка адреса отправления (пока упрощенно)"""
     # В реальном приложении здесь должен быть геокодер
     await message.answer(
-        "📍 Пожалуйста, отправьте ваше местоположение, нажав на кнопку 📍",
+        "📍 Пожалуйста, отправьте ваше местоположение, нажав на кнопку 'Отправить текущее местоположение' ниже:",
         reply_markup=get_location_keyboard()
+    )
+    await message.answer(
+        "Или отмените заказ:",
+        reply_markup=get_cancel_keyboard()
     )
 
 @router.message(TaxiOrderStates.waiting_for_destination, F.location)
@@ -643,14 +647,6 @@ async def driver_info_callback(callback: CallbackQuery, state: FSMContext):
 
 
 
-@router.callback_query(F.data == "send_location")
-async def send_location_callback(callback: CallbackQuery, state: FSMContext):
-    """Обработка нажатия кнопки отправки местоположения"""
-    await callback.answer("📍 Пожалуйста, отправьте ваше местоположение, используя кнопку 📍 в Telegram")
-    await callback.message.edit_text(
-        "📍 Пожалуйста, отправьте ваше местоположение, используя кнопку 📍 в Telegram",
-        reply_markup=get_cancel_keyboard()
-    )
 
 @router.callback_query(F.data == "back_to_order")
 async def back_to_order_callback(callback: CallbackQuery, state: FSMContext):
@@ -672,11 +668,15 @@ def get_cancel_keyboard():
 
 def get_location_keyboard():
     """Клавиатура для отправки местоположения"""
-    builder = InlineKeyboardBuilder()
-    builder.button(text="📍 Отправить местоположение", callback_data="send_location")
-    builder.button(text="❌ Отмена", callback_data="cancel_order")
-    builder.button(text=Config.BUTTONS['main_menu'], callback_data="main_menu")
-    return builder.as_markup()
+    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📍 Отправить текущее местоположение", request_location=True)]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    return keyboard
 
 def get_confirm_keyboard():
     """Клавиатура подтверждения"""
