@@ -391,16 +391,31 @@ async def handle_pickup_location(message: Message, state: FSMContext):
 
 @router.message(TaxiOrderStates.waiting_for_pickup, F.text)
 async def handle_pickup_address(message: Message, state: FSMContext):
-    """Обработка адреса отправления (пока упрощенно)"""
-    # В реальном приложении здесь должен быть геокодер
-    await message.answer(
-        "📍 Пожалуйста, отправьте ваше местоположение, нажав на кнопку 'Отправить текущее местоположение' ниже:",
-        reply_markup=get_location_keyboard()
-    )
-    await message.answer(
-        "Или отмените заказ:",
-        reply_markup=get_cancel_keyboard()
-    )
+    """Обработка адреса отправления (с геокодированием)"""
+    map_service = MapService()
+    geocoded_location = map_service.geocode_address(message.text)
+
+    if geocoded_location:
+        pickup_lat, pickup_lon = geocoded_location
+        await state.update_data(
+            pickup_lat=pickup_lat,
+            pickup_lon=pickup_lon,
+            pickup_address=message.text # Store the text address as well
+        )
+        await state.set_state(TaxiOrderStates.waiting_for_destination)
+        await message.answer(
+            Config.MESSAGES['destination_needed'],
+            reply_markup=get_cancel_keyboard()
+        )
+    else:
+        await message.answer(
+            "❌ Не удалось определить местоположение по адресу. Пожалуйста, попробуйте еще раз или отправьте ваше местоположение, нажав на кнопку 'Отправить текущее местоположение' ниже:",
+            reply_markup=get_location_keyboard()
+        )
+        await message.answer(
+            "Или отмените заказ:",
+            reply_markup=get_cancel_keyboard()
+        )
 
 @router.message(TaxiOrderStates.waiting_for_destination, F.location)
 async def handle_destination_location(message: Message, state: FSMContext):
@@ -440,6 +455,58 @@ async def handle_destination_location(message: Message, state: FSMContext):
         f"🚕 Подтвердите заказ такси:\n\n"
         f"📍 Откуда: {data.get('pickup_address', 'Указанное местоположение')}\n"
         f"🎯 Куда: {message.text or 'Указанное местоположение'}\n"
+        f"📏 Расстояние: {PriceCalculator.format_distance(distance)}\n"
+        f"💰 Стоимость: {PriceCalculator.format_price(price)}",
+        reply_markup=get_confirm_keyboard()
+    )
+
+@router.message(TaxiOrderStates.waiting_for_destination, F.text)
+async def handle_destination_address(message: Message, state: FSMContext):
+    """Обработка адреса назначения (с геокодированием)"""
+    destination_address = message.text
+    
+    data = await state.get_data()
+    pickup_lat = data.get('pickup_lat')
+    pickup_lon = data.get('pickup_lon')
+    
+    if not pickup_lat or not pickup_lon:
+        await message.answer("❌ Ошибка: не найдена точка отправления. Попробуйте заново.")
+        await state.clear()
+        return
+    
+    map_service = MapService()
+    geocoded_location = map_service.geocode_address(destination_address)
+
+    if geocoded_location:
+        destination_lat, destination_lon = geocoded_location
+    else:
+        await message.answer(
+            "❌ Не удалось определить местоположение по адресу назначения. Пожалуйста, попробуйте еще раз.",
+            reply_markup=get_cancel_keyboard()
+        )
+        return # Stop processing if geocoding fails
+    
+    distance = PriceCalculator.calculate_distance(
+        pickup_lat, pickup_lon,
+        destination_lat, destination_lon
+    )
+    
+    price = PriceCalculator.calculate_taxi_price(distance)
+    
+    await state.update_data(
+        destination_address=destination_address,
+        destination_lat=destination_lat,
+        destination_lon=destination_lon,
+        distance=distance,
+        price=price
+    )
+    
+    await state.set_state(TaxiOrderStates.confirming_order)
+    
+    await message.answer(
+        f"🚕 Подтвердите заказ такси:\n\n"
+        f"📍 Откуда: {data.get('pickup_address', 'Указанное местоположение')}\n"
+        f"🎯 Куда: {destination_address}\n"
         f"📏 Расстояние: {PriceCalculator.format_distance(distance)}\n"
         f"💰 Стоимость: {PriceCalculator.format_price(price)}",
         reply_markup=get_confirm_keyboard()

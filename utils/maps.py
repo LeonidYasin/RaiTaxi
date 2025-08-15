@@ -21,8 +21,41 @@ class MapService:
         # Создаем папку для кэша карт
         self.cache_dir = "static/images/maps"
         os.makedirs(self.cache_dir, exist_ok=True)
+
+    def geocode_address(self, address: str) -> Optional[Tuple[float, float]]:
+        """
+        Геокодирование адреса (преобразование адреса в координаты)
+        Использует Nominatim OpenStreetMap API.
+        """
+        nominatim_url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            'q': address,
+            'format': 'json',
+            'limit': 1,
+            'addressdetails': 0,
+            'extratags': 0,
+            'namedetails': 0
+        }
+        headers = {
+            'User-Agent': 'RaiTaxiBot/1.0 (https://github.com/your-username/raitaxi)' # Replace with actual repo URL
+        }
+        try:
+            response = requests.get(nominatim_url, params=params, headers=headers, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            if data and len(data) > 0:
+                lat = float(data[0]['lat'])
+                lon = float(data[0]['lon'])
+                return lat, lon
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"Ошибка геокодирования адреса '{address}': {e}")
+            return None
+        except ValueError as e:
+            print(f"Ошибка парсинга ответа геокодера: {e}")
+            return None
     
-    def get_static_map(self, center_lat: float, center_lon: float, 
+    def get_static_map(self, center_lat: float, center_lon: float,
                        markers: list = None, routes: list = None) -> Optional[bytes]:
         """
         Получение статической карты
