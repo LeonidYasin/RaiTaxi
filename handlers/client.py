@@ -418,16 +418,17 @@ async def handle_pickup_address(message: Message, state: FSMContext):
                 Config.MESSAGES['destination_needed'],
                 reply_markup=get_cancel_keyboard()
             )
-    else:
-        print(f"DEBUG: Geocoding failed for pickup address: '{message.text}'") # Add debug print
-        await message.answer(
-            "❌ Не удалось определить местоположение по адресу отправления. Пожалуйста, попробуйте еще раз, введя более точный адрес, или отправьте ваше местоположение с помощью кнопки.",
-            reply_markup=get_location_keyboard()
-        )
-        await message.answer(
-            "Или отмените заказ:",
-            reply_markup=get_cancel_keyboard()
-        )
+        else:
+            print(f"DEBUG: Geocoding failed for pickup address: '{message.text}'") # Add debug print
+            await state.update_data(pickup_address="Неизвестно") # Ensure pickup_address is always set
+            await message.answer(
+                "❌ Не удалось определить местоположение по адресу отправления. Пожалуйста, попробуйте еще раз, введя более точный адрес, или отправьте ваше местоположение с помощью кнопки.",
+                reply_markup=get_location_keyboard()
+            )
+            await message.answer(
+                "Или отмените заказ:",
+                reply_markup=get_cancel_keyboard()
+            )
 
 @router.message(TaxiOrderStates.waiting_for_destination, F.location)
 async def handle_destination_location(message: Message, state: FSMContext):
@@ -463,14 +464,31 @@ async def handle_destination_location(message: Message, state: FSMContext):
     await state.set_state(TaxiOrderStates.confirming_order)
     
     # Показываем подтверждение заказа
-    await message.answer(
+    map_service = MapService()
+    map_data = map_service.create_simple_map(
+        data['pickup_lat'], data['pickup_lon'],
+        destination_lat, destination_lon
+    )
+
+    confirmation_text = (
         f"🚕 Подтвердите заказ такси:\n\n"
         f"📍 Откуда: {data.get('pickup_address', 'Указанное местоположение')}\n"
-        f"🎯 Куда: {message.text or 'Указанное местоположение'}\n"
+        f"🎯 Куда: {destination_address}\n"
         f"📏 Расстояние: {PriceCalculator.format_distance(distance)}\n"
-        f"💰 Стоимость: {PriceCalculator.format_price(price)}",
-        reply_markup=get_confirm_keyboard()
+        f"💰 Стоимость: {PriceCalculator.format_price(price)}"
     )
+
+    if map_data:
+        await message.answer_photo(
+            InputFile(io.BytesIO(map_data)),
+            caption=confirmation_text,
+            reply_markup=get_confirm_keyboard()
+        )
+    else:
+        await message.answer(
+            confirmation_text,
+            reply_markup=get_confirm_keyboard()
+        )
 
 @router.message(TaxiOrderStates.waiting_for_destination, F.text)
 async def handle_destination_address(message: Message, state: FSMContext):
