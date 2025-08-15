@@ -3,7 +3,8 @@
 """
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, Location, ReplyKeyboardMarkup, KeyboardButton
+import io
+from aiogram.types import Message, CallbackQuery, Location, ReplyKeyboardMarkup, KeyboardButton, InputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -403,10 +404,20 @@ async def handle_pickup_address(message: Message, state: FSMContext):
             pickup_address=message.text # Store the text address as well
         )
         await state.set_state(TaxiOrderStates.waiting_for_destination)
-        await message.answer(
-            Config.MESSAGES['destination_needed'],
-            reply_markup=get_cancel_keyboard()
-        )
+        
+        map_service = MapService()
+        map_data = map_service.create_simple_map(pickup_lat, pickup_lon)
+        if map_data:
+            await message.answer_photo(
+                InputFile(io.BytesIO(map_data)),
+                caption=Config.MESSAGES['destination_needed'],
+                reply_markup=get_cancel_keyboard()
+            )
+        else:
+            await message.answer(
+                Config.MESSAGES['destination_needed'],
+                reply_markup=get_cancel_keyboard()
+            )
     else:
         print(f"DEBUG: Geocoding failed for pickup address: '{message.text}'") # Add debug print
         await message.answer(
@@ -503,14 +514,31 @@ async def handle_destination_address(message: Message, state: FSMContext):
     
     await state.set_state(TaxiOrderStates.confirming_order)
     
-    await message.answer(
+    map_service = MapService()
+    map_data = map_service.create_simple_map(
+        data['pickup_lat'], data['pickup_lon'],
+        destination_lat, destination_lon
+    )
+
+    confirmation_text = (
         f"🚕 Подтвердите заказ такси:\n\n"
         f"📍 Откуда: {data.get('pickup_address', 'Указанное местоположение')}\n"
         f"🎯 Куда: {destination_address}\n"
         f"📏 Расстояние: {PriceCalculator.format_distance(distance)}\n"
-        f"💰 Стоимость: {PriceCalculator.format_price(price)}",
-        reply_markup=get_confirm_keyboard()
+        f"💰 Стоимость: {PriceCalculator.format_price(price)}"
     )
+
+    if map_data:
+        await message.answer_photo(
+            InputFile(io.BytesIO(map_data)),
+            caption=confirmation_text,
+            reply_markup=get_confirm_keyboard()
+        )
+    else:
+        await message.answer(
+            confirmation_text,
+            reply_markup=get_confirm_keyboard()
+        )
 
 @router.callback_query(F.data == "confirm_order")
 async def confirm_order(callback: CallbackQuery, state: FSMContext):
@@ -523,8 +551,10 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext):
         order_type='taxi',
         pickup_lat=data['pickup_lat'],
         pickup_lon=data['pickup_lon'],
+        pickup_address=data.get('pickup_address'), # Add pickup_address
         destination_lat=data.get('destination_lat'),
         destination_lon=data.get('destination_lon'),
+        destination_address=data.get('destination_address'), # Add destination_address
         price=data['price'],
         distance=data['distance']
     )
