@@ -488,12 +488,10 @@ async def handle_destination_address(message: Message, state: FSMContext):
         )
         return # Stop processing if geocoding fails
     
-    distance = PriceCalculator.calculate_distance(
+    price, distance = PriceCalculator.calculate_taxi_price(
         pickup_lat, pickup_lon,
         destination_lat, destination_lon
     )
-    
-    price = PriceCalculator.calculate_taxi_price(distance)
     
     await state.update_data(
         destination_address=destination_address,
