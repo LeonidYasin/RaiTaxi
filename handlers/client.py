@@ -3,7 +3,7 @@
 """
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, Location
+from aiogram.types import Message, CallbackQuery, Location, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -344,8 +344,12 @@ async def order_taxi_callback(callback: CallbackQuery, state: FSMContext):
     
     await state.set_state(TaxiOrderStates.waiting_for_pickup)
     
-    await callback.message.edit_text(
+    await callback.message.answer(
         Config.MESSAGES['taxi_order'],
+        reply_markup=get_location_keyboard()
+    )
+    await callback.message.answer(
+        "Или отмените заказ:",
         reply_markup=get_cancel_keyboard()
     )
 
@@ -668,7 +672,6 @@ def get_cancel_keyboard():
 
 def get_location_keyboard():
     """Клавиатура для отправки местоположения"""
-    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📍 Отправить текущее местоположение", request_location=True)]
