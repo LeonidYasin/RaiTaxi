@@ -641,38 +641,7 @@ async def driver_info_callback(callback: CallbackQuery, state: FSMContext):
         reply_markup=builder.as_markup()
     )
 
-@router.callback_query(F.data == "driver_panel")
-async def driver_panel_callback(callback: CallbackQuery):
-    """Переход к панели водителя"""
-    # Создаем заглушку для панели водителя
-    await callback.message.edit_text(
-        "🚗 Панель водителя\n\n"
-        "Функции для водителей находятся в разработке.\n"
-        "Скоро здесь появится возможность:\n"
-        "• Просматривать доступные заказы\n"
-        "• Управлять статусом\n"
-        "• Просматривать историю поездок\n"
-        "• Настройки профиля\n\n"
-        "Используйте кнопку 'Стать водителем' для регистрации.",
-        reply_markup=get_main_menu_keyboard()
-    )
-    await callback.answer()
 
-@router.callback_query(F.data == "start_driver_registration")
-async def start_driver_registration_callback(callback: CallbackQuery, state: FSMContext):
-    """Переход к регистрации водителя"""
-    # Создаем заглушку для регистрации водителя
-    await callback.message.edit_text(
-        "🚗 Регистрация водителя\n\n"
-        "Функция регистрации водителя находится в разработке.\n"
-        "Скоро здесь появится возможность:\n"
-        "• Ввести данные автомобиля\n"
-        "• Загрузить документы\n"
-        "• Пройти верификацию\n\n"
-        "Обратитесь к администратору для регистрации.",
-        reply_markup=get_main_menu_keyboard()
-    )
-    await callback.answer()
 
 @router.callback_query(F.data == "send_location")
 async def send_location_callback(callback: CallbackQuery, state: FSMContext):
