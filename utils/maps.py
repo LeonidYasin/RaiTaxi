@@ -8,6 +8,9 @@ from typing import Tuple, Optional
 from PIL import Image, ImageDraw, ImageFont
 import io
 from config import Config
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MapService:
     """Сервис для работы с картами"""
@@ -27,7 +30,7 @@ class MapService:
         Геокодирование адреса (преобразование адреса в координаты)
         Использует Nominatim OpenStreetMap API.
         """
-        nominatim_url = "https://nominatim.openstreetmap.org/search"
+        nominatim_url = Config.NOMINATIM_URL + "/search"
         params = {
             'q': address,
             'format': 'json',
@@ -49,10 +52,10 @@ class MapService:
                 return lat, lon
             return None
         except requests.exceptions.RequestException as e:
-            print(f"Ошибка геокодирования адреса '{address}': {e}")
+            logger.error(f"Ошибка геокодирования адреса '{address}': {e}")
             return None
         except ValueError as e:
-            print(f"Ошибка парсинга ответа геокодера: {e}")
+            logger.error(f"Ошибка парсинга ответа геокодера: {e}")
             return None
 
     def reverse_geocode_coords(self, lat: float, lon: float) -> Optional[str]:
@@ -60,7 +63,7 @@ class MapService:
         Обратное геокодирование координат (преобразование координат в адрес)
         Использует Nominatim OpenStreetMap API.
         """
-        nominatim_url = "https://nominatim.openstreetmap.org/reverse"
+        nominatim_url = Config.NOMINATIM_URL + "/reverse"
         params = {
             'lat': lat,
             'lon': lon,
@@ -79,10 +82,10 @@ class MapService:
                 return data['display_name']
             return None
         except requests.exceptions.RequestException as e:
-            print(f"Ошибка обратного геокодирования координат ({lat}, {lon}): {e}")
+            logger.error(f"Ошибка обратного геокодирования координат ({lat}, {lon}): {e}")
             return None
         except ValueError as e:
-            print(f"Ошибка парсинга ответа обратного геокодера: {e}")
+            logger.error(f"Ошибка парсинга ответа обратного геокодера: {e}")
             return None
     
     def get_static_map(self, center_lat: float, center_lon: float,
@@ -126,8 +129,8 @@ class MapService:
                 # and then drawing the polyline on the map.
                 # For simplicity, we'll just add markers for start/end of route for now.
                 # A more advanced implementation would fetch polyline data and add it as an overlay.
-                print("Warning: 'routes' parameter is not directly supported by staticmap.openstreetmap.de for drawing polylines.")
-                print("Consider using a routing service and drawing the polyline as an overlay.")
+                logger.warning("Warning: 'routes' parameter is not directly supported by OpenStreetMap static maps for drawing polylines.")
+                logger.warning("Consider using a routing service (e.g., OSRM, GraphHopper) and drawing the polyline as an overlay.")
             
             # Выполняем запрос
             response = requests.get(self.base_url, params=params, timeout=10)
@@ -136,7 +139,7 @@ class MapService:
             return response.content
             
         except Exception as e:
-            print(f"Ошибка получения карты: {e}")
+            logger.error(f"Ошибка получения карты: {e}")
             return None
     
     def create_simple_map(self, pickup_lat: float, pickup_lon: float,
@@ -225,7 +228,7 @@ class MapService:
             return output.getvalue()
             
         except Exception as e:
-            print(f"Ошибка добавления оверлея: {e}")
+            logger.error(f"Ошибка добавления оверлея: {e}")
             return map_data
     
     def get_map_url(self, lat: float, lon: float, zoom: int = None) -> str:
@@ -294,7 +297,7 @@ class MapService:
                 f.write(map_data)
             return filepath
         except Exception as e:
-            print(f"Ошибка сохранения карты в кэш: {e}")
+            logger.error(f"Ошибка сохранения карты в кэш: {e}")
             return ""
     
     def clear_cache(self, max_age_hours: int = 24):
@@ -315,6 +318,6 @@ class MapService:
                     file_age = current_time - os.path.getmtime(filepath)
                     if file_age > max_age_seconds:
                         os.remove(filepath)
-                        print(f"Удален старый файл кэша: {filename}")
+                        logger.info(f"Удален старый файл кэша: {filename}")
         except Exception as e:
-            print(f"Ошибка очистки кэша: {e}")
+            logger.error(f"Ошибка очистки кэша: {e}")
