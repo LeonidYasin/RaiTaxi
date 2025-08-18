@@ -16,8 +16,8 @@ class Config:
     DATABASE_PATH = os.getenv('DATABASE_PATH', 'taxi.db')
     
     # Карты
-    OSM_STATIC_MAPS_URL = os.getenv('OSM_STATIC_MAPS_URL', 
-                                   'https://staticmap.openstreetmap.de/staticmap.php')
+    OSM_STATIC_MAPS_URL = os.getenv('OSM_STATIC_MAPS_URL',
+                                   'https://www.openstreetmap.org/export/staticmap.php')
     MAP_WIDTH = 600
     MAP_HEIGHT = 400
     MAP_ZOOM = 14
