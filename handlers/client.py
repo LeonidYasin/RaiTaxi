@@ -25,6 +25,7 @@ class TaxiOrderStates(StatesGroup):
     waiting_for_pickup = State()
     waiting_for_destination = State()
     confirming_order = State()
+    searching_for_driver = State()
 
 class DeliveryOrderStates(StatesGroup):
     """Состояния для заказа доставки"""
@@ -32,7 +33,6 @@ class DeliveryOrderStates(StatesGroup):
     waiting_for_pickup = State()
     waiting_for_destination = State()
     confirming_order = State()
-    searching_for_driver = State()
 
 # Глобальные переменные для доступа к операциям БД
 user_ops = None
