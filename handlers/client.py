@@ -162,9 +162,9 @@ async def admin_command(message: Message):
     )
 
 @router.message(Command("menu"))
-async def menu_command(message: Message):
+async def menu_command(message: Message, state: FSMContext):
     """Обработка команды /menu - возврат в главное меню"""
-    await start_command(message)
+    await start_command(message, state)
 
 @router.message(Command("info"))
 async def info_command(message: Message):
@@ -726,7 +726,7 @@ async def back_to_main(callback: CallbackQuery, state: FSMContext):
     # Очищаем состояние FSM перед возвратом в главное меню
     if state:
         await state.clear()
-    await start_command(callback.message)
+    await start_command(callback.message, state)
 
 @router.callback_query(F.data == "main_menu")
 async def main_menu_callback(callback: CallbackQuery, state: FSMContext):
@@ -734,7 +734,7 @@ async def main_menu_callback(callback: CallbackQuery, state: FSMContext):
     # Очищаем состояние FSM перед возвратом в главное меню
     if state:
         await state.clear()
-    await start_command(callback.message)
+    await start_command(callback.message, state)
     await callback.answer()
 
 @router.callback_query(F.data == "become_driver")
@@ -804,7 +804,7 @@ async def handle_phone_number(message: Message, state: FSMContext):
     
     await message.answer("✅ Спасибо! Ваш номер телефона сохранен.")
     await state.clear()
-    await start_command(message) # Return to main menu
+    await start_command(message, state) # Return to main menu
 
 @router.message(TaxiOrderStates.waiting_for_phone, F.text)
 async def handle_phone_number_text(message: Message, state: FSMContext):
@@ -824,7 +824,7 @@ async def handle_phone_number_text(message: Message, state: FSMContext):
     
     await message.answer("✅ Спасибо! Ваш номер телефона сохранен.")
     await state.clear()
-    await start_command(message) # Return to main menu
+    await start_command(message, state) # Return to main menu
 
 @router.callback_query(F.data == "back_to_order")
 async def back_to_order_callback(callback: CallbackQuery, state: FSMContext):
