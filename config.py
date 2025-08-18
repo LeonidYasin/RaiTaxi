@@ -16,12 +16,11 @@ class Config:
     DATABASE_PATH = os.getenv('DATABASE_PATH', 'taxi.db')
     
     # Карты
-    OSM_STATIC_MAPS_URL = os.getenv('OSM_STATIC_MAPS_URL',
-                                   'https://staticmap.openstreetmap.de/staticmap.php')
+    MAP_LINK_BASE_URL = os.getenv('MAP_LINK_BASE_URL', 'https://yandex.ru/maps/') # Base URL for Yandex Maps links
     NOMINATIM_URL = os.getenv('NOMINATIM_URL', 'https://nominatim.openstreetmap.org')
-    MAP_WIDTH = 600
-    MAP_HEIGHT = 400
-    MAP_ZOOM = 14
+    MAP_WIDTH = 600 # Still used for optimal zoom calculation, but not for Yandex link
+    MAP_HEIGHT = 400 # Still used for optimal zoom calculation, but not for Yandex link
+    MAP_ZOOM = 14 # Default zoom for Yandex links
     
     # Тарифы (в рублях)
     BASE_FARE = int(os.getenv('BASE_FARE', 100))
