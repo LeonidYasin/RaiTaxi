@@ -25,12 +25,13 @@ user_ops = None
 order_ops = None
 driver_ops = None
 
-def set_operations(user_operations, order_operations, driver_operations):
-    """Устанавливает операции с БД для обработчиков"""
-    global user_ops, order_ops, driver_ops
+def set_operations(user_operations, order_operations, driver_operations, bot_instance):
+    """Устанавливает операции с БД и экземпляр бота для обработчиков"""
+    global user_ops, order_ops, driver_ops, bot
     user_ops = user_operations
     order_ops = order_operations
     driver_ops = driver_operations
+    bot = bot_instance
 
 @router.message(Command("admin"))
 async def admin_command(message: Message):
