@@ -47,7 +47,7 @@ def set_operations(user_operations: UserOperations, order_operations: OrderOpera
     bot = bot_instance
 
 @router.message(Command("start"))
-async def start_command(message: Message):
+async def start_command(message: Message, state: FSMContext):
     """Обработка команды /start"""
     user = message.from_user
     
