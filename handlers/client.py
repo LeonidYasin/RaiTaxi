@@ -2,8 +2,10 @@
 Обработчики команд для клиентов Рай-Такси
 """
 
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 import io
+import asyncio
+import time
 from aiogram.types import Message, CallbackQuery, Location, ReplyKeyboardMarkup, KeyboardButton, InputFile
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -30,16 +32,18 @@ class DeliveryOrderStates(StatesGroup):
     waiting_for_pickup = State()
     waiting_for_destination = State()
     confirming_order = State()
+    searching_for_driver = State()
 
 # Глобальные переменные для доступа к операциям БД
 user_ops = None
 order_ops = None
 
-def set_operations(user_operations: UserOperations, order_operations: OrderOperations):
-    """Устанавливает операции с БД для обработчиков"""
-    global user_ops, order_ops
+def set_operations(user_operations: UserOperations, order_operations: OrderOperations, bot_instance: Bot):
+    """Устанавливает операции с БД и экземпляр бота для обработчиков"""
+    global user_ops, order_ops, bot
     user_ops = user_operations
     order_ops = order_operations
+    bot = bot_instance
 
 @router.message(Command("start"))
 async def start_command(message: Message):
@@ -590,13 +594,17 @@ async def confirm_order(callback: CallbackQuery, state: FSMContext):
             Config.MESSAGES['order_created'],
             reply_markup=get_main_menu_keyboard()
         )
+        
+        # Запускаем процесс поиска и назначения водителя
+        await state.set_state(TaxiOrderStates.searching_for_driver)
+        await find_and_assign_driver(callback.message, order.id, state)
+        
     else:
         await callback.message.edit_text(
             "❌ Ошибка создания заказа. Попробуйте позже.",
             reply_markup=get_main_menu_keyboard()
         )
-    
-    await state.clear()
+        await state.clear()
 
 @router.callback_query(F.data == "cancel_order")
 async def cancel_order(callback: CallbackQuery, state: FSMContext):
@@ -784,6 +792,98 @@ async def back_to_order_callback(callback: CallbackQuery, state: FSMContext):
         "⬅️ Возвращаемся к заказу...",
         reply_markup=get_cancel_keyboard()
     )
+
+async def find_and_assign_driver(message: Message, order_id: int, state: FSMContext):
+    """
+    Находит доступных водителей и отправляет им запрос на принятие заказа.
+    """
+    await message.answer("🔍 Ищем ближайшего водителя...")
+    
+    order = await order_ops.get_order_by_id(order_id)
+    if not order:
+        await message.answer("❌ Заказ не найден. Попробуйте создать новый.", reply_markup=get_main_menu_keyboard())
+        await state.clear()
+        return
+
+    # Обновляем статус заказа на "searching_driver"
+    await order_ops.update_order_status(order_id, Config.ORDER_STATUSES['searching_driver'])
+
+    # Получаем доступных водителей
+    from database.operations import DriverOperations
+    driver_ops = DriverOperations(user_ops.db) # Assuming user_ops.db is accessible
+    available_drivers = await driver_ops.get_available_drivers()
+
+    if not available_drivers:
+        await message.answer("😔 К сожалению, сейчас нет доступных водителей. Попробуйте позже.", reply_markup=get_main_menu_keyboard())
+        await order_ops.update_order_status(order_id, Config.ORDER_STATUSES['cancelled'])
+        await state.clear()
+        return
+
+    # Сортируем водителей по расстоянию до точки отправления (простая эвристика)
+    # В реальном приложении здесь была бы более сложная логика с учетом трафика и т.д.
+    def sort_by_distance(driver):
+        if driver.current_location_lat and driver.current_location_lon:
+            return PriceCalculator.calculate_distance(
+                order.pickup_lat, order.pickup_lon,
+                driver.current_location_lat, driver.current_location_lon
+            )
+        return float('inf') # Отправляем водителей без координат в конец списка
+
+    available_drivers.sort(key=sort_by_distance)
+
+    # Отправляем запрос водителям по очереди
+    for driver in available_drivers:
+        driver_user = await user_ops.get_user_by_id(driver.user_id) # Assuming get_user_by_id exists
+        if not driver_user or not driver_user.telegram_id:
+            continue
+
+        offer_text = (
+            f"🔔 Новый заказ #{order.id}!\n\n"
+            f"📍 Откуда: {order.pickup_address or f'{order.pickup_lat:.4f}, {order.pickup_lon:.4f}'}\n"
+            f"🎯 Куда: {order.destination_address or f'{order.destination_lat:.4f}, {order.destination_lon:.4f}'}\n"
+            f"📏 Расстояние: {PriceCalculator.format_distance(order.distance)}\n"
+            f"💰 Стоимость: {PriceCalculator.format_price(order.price)}\n\n"
+            "Принять заказ?"
+        )
+        
+        builder = InlineKeyboardBuilder()
+        builder.button(text="✅ Принять", callback_data=f"driver_accept_order_{order.id}")
+        builder.button(text="❌ Отказаться", callback_data=f"driver_reject_order_{order.id}")
+        
+        try:
+            await bot.send_message(
+                chat_id=driver_user.telegram_id,
+                text=offer_text,
+                reply_markup=builder.as_markup()
+            )
+            await message.answer(f"➡️ Запрос отправлен водителю {driver_user.first_name} ({driver.car_model}). Ожидаем ответа...")
+            
+            # Ждем ответа водителя (например, 30 секунд)
+            # В реальном приложении здесь будет более сложная логика с таймаутами и очередями
+            await asyncio.sleep(Config.NOTIFICATION_TIMEOUT)
+            
+            # Проверяем статус заказа после ожидания
+            updated_order = await order_ops.get_order_by_id(order_id)
+            if updated_order.status == Config.ORDER_STATUSES['driver_assigned']:
+                await message.answer(f"✅ Водитель {driver_user.first_name} принял ваш заказ!")
+                await state.clear()
+                return # Заказ принят, выходим
+            elif updated_order.status == Config.ORDER_STATUSES['cancelled']:
+                await message.answer("❌ Заказ был отменен водителем или истек срок ожидания.", reply_markup=get_main_menu_keyboard())
+                await state.clear()
+                return
+            else:
+                await message.answer(f"Водитель {driver_user.first_name} не ответил или отказался. Ищем дальше...")
+
+        except Exception as e:
+            print(f"Ошибка отправки запроса водителю {driver_user.telegram_id}: {e}")
+            await message.answer(f"❌ Не удалось связаться с водителем {driver_user.first_name}. Ищем другого...")
+            continue # Пробуем следующего водителя
+
+    # Если ни один водитель не принял заказ
+    await message.answer("😔 К сожалению, ни один водитель не смог принять ваш заказ. Попробуйте позже.", reply_markup=get_main_menu_keyboard())
+    await order_ops.update_order_status(order_id, Config.ORDER_STATUSES['cancelled'])
+    await state.clear()
 
 # Вспомогательные функции для клавиатур
 def get_cancel_keyboard():

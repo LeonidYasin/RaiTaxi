@@ -65,13 +65,13 @@ class RaiTaxiBot:
         
         # Инициализируем операции с БД для обработчиков
         from handlers.client import set_operations
-        set_operations(self.user_ops, self.order_ops)
+        set_operations(self.user_ops, self.order_ops, self.bot)
         
         from handlers.driver import set_operations as set_driver_operations
-        set_driver_operations(self.user_ops, self.order_ops, self.driver_ops)
+        set_driver_operations(self.user_ops, self.order_ops, self.driver_ops, self.bot)
         
         from handlers.admin import set_operations as set_admin_operations
-        set_admin_operations(self.user_ops, self.order_ops, self.driver_ops)
+        set_admin_operations(self.user_ops, self.order_ops, self.driver_ops, self.bot)
         
         # Регистрируем middleware
         self._register_middleware()

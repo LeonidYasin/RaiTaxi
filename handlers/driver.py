@@ -26,17 +26,19 @@ class DriverOrderStates(StatesGroup):
     viewing_orders = State()
     order_details = State()
 
-# Глобальные переменные для доступа к операциям БД
+# Глобальные переменные для доступа к операциям БД и боту
 user_ops = None
 order_ops = None
 driver_ops = None
+bot = None
 
-def set_operations(user_operations, order_operations, driver_operations):
-    """Устанавливает операции с БД для обработчиков"""
-    global user_ops, order_ops, driver_ops
+def set_operations(user_operations, order_operations, driver_operations, bot_instance):
+    """Устанавливает операции с БД и экземпляр бота для обработчиков"""
+    global user_ops, order_ops, driver_ops, bot
     user_ops = user_operations
     order_ops = order_operations
     driver_ops = driver_operations
+    bot = bot_instance
 
 @router.message(Command("driver"))
 async def driver_command(message: Message):
@@ -373,54 +375,94 @@ async def view_available_orders(callback: CallbackQuery):
     except Exception as e:
         await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
 
-@router.callback_query(F.data.startswith("take_order_"))
-async def take_order(callback: CallbackQuery):
-    """Принимает заказ"""
+@router.callback_query(F.data.startswith("driver_accept_order_"))
+async def driver_accept_order(callback: CallbackQuery):
+    """Обрабатывает принятие заказа водителем"""
     try:
-        # Безопасное извлечение order_id
-        parts = callback.data.split("_")
-        if len(parts) != 3:
-            await callback.answer("❌ Ошибка: неверный формат данных", show_alert=True)
-            return
-            
-        order_id = int(parts[2])
+        order_id = int(callback.data.split("_")[3])
         user_id = callback.from_user.id
         
-        # Получаем ID пользователя из БД
         user_db_id = await user_ops.get_user_id_by_telegram_id(user_id)
-        
         if not user_db_id:
             await callback.answer("❌ Ошибка: пользователь не найден", show_alert=True)
             return
         
-        # Принимаем заказ
         success = await order_ops.assign_driver_to_order(order_id, user_db_id)
         
         if success:
-            await callback.answer("✅ Заказ принят! Свяжитесь с клиентом.")
-            
-            # Показываем детали заказа
+            await callback.answer("✅ Заказ принят!")
             order = await order_ops.get_order_by_id(order_id)
-            if order:
-                order_text = f"🚕 Заказ #{order.id} принят!\n\n"
-                order_text += f"📍 Откуда: {order.pickup_address or 'Координаты'}\n"
-                if order.destination_address:
-                    order_text += f"🎯 Куда: {order.destination_address}\n"
-                order_text += f"💰 Стоимость: {order.price:.0f} ₽\n"
-                order_text += f"📏 Расстояние: {order.distance:.1f} км\n\n"
-                order_text += "📱 Свяжитесь с клиентом для уточнения деталей"
-                
-                await callback.message.edit_text(
-                    order_text,
-                    reply_markup=get_back_to_driver_panel_keyboard()
+            client_user = await user_ops.get_user_by_id(order.client_id)
+            
+            if client_user and client_user.telegram_id:
+                await bot.send_message(
+                    chat_id=client_user.telegram_id,
+                    text=f"✅ Ваш заказ #{order.id} принят водителем! Водитель скоро свяжется с вами."
                 )
+            
+            # Обновляем сообщение для водителя
+            await callback.message.edit_text(
+                f"✅ Вы приняли заказ #{order.id}!\n\n"
+                f"📍 Откуда: {order.pickup_address or f'{order.pickup_lat:.4f}, {order.pickup_lon:.4f}'}\n"
+                f"🎯 Куда: {order.destination_address or f'{order.destination_lat:.4f}, {order.destination_lon:.4f}'}\n"
+                f"💰 Стоимость: {order.price:.0f} ₽\n"
+                f"📏 Расстояние: {order.distance:.1f} км\n\n"
+                "📱 Свяжитесь с клиентом для уточнения деталей."
+            )
+            # Optionally, update driver's availability to busy
+            await driver_ops.update_driver_availability(user_db_id, False) # Driver is now busy
+            
         else:
-            await callback.answer("❌ Заказ уже принят другим водителем", show_alert=True)
+            await callback.answer("❌ Заказ уже принят другим водителем или отменен.", show_alert=True)
+            await callback.message.edit_text(
+                "❌ Этот заказ уже недоступен.",
+                reply_markup=get_back_to_driver_panel_keyboard()
+            )
             
     except ValueError:
         await callback.answer("❌ Ошибка: неверный ID заказа", show_alert=True)
     except Exception as e:
-        await callback.answer(f"❌ Ошибка: {str(e)}", show_alert=True)
+        await callback.answer(f"❌ Ошибка при принятии заказа: {str(e)}", show_alert=True)
+
+@router.callback_query(F.data.startswith("driver_reject_order_"))
+async def driver_reject_order(callback: CallbackQuery):
+    """Обрабатывает отказ водителя от заказа"""
+    try:
+        order_id = int(callback.data.split("_")[3])
+        user_id = callback.from_user.id
+        
+        # Просто уведомляем водителя, что заказ не принят
+        await callback.answer("❌ Вы отказались от заказа.")
+        await callback.message.edit_text(
+            f"Вы отказались от заказа #{order_id}.",
+            reply_markup=get_back_to_driver_panel_keyboard()
+        )
+        
+        # В find_and_assign_driver будет логика перенаправления на другого водителя
+        # Здесь мы просто обновляем статус заказа, чтобы он снова стал "new" или "searching_driver"
+        # для возможности предложить его другому водителю.
+        # Однако, если мы хотим, чтобы find_and_assign_driver продолжил поиск,
+        # то не нужно менять статус здесь, а просто позволить таймауту сработать.
+        # Для простоты, пока не меняем статус здесь.
+        
+    except ValueError:
+        await callback.answer("❌ Ошибка: неверный ID заказа", show_alert=True)
+    except Exception as e:
+        await callback.answer(f"❌ Ошибка при отказе от заказа: {str(e)}", show_alert=True)
+
+@router.callback_query(F.data.startswith("take_order_"))
+async def take_order(callback: CallbackQuery):
+    """
+    Этот обработчик остался от предыдущей логики "доступных заказов".
+    Его можно удалить или переиспользовать, если "view_available_orders"
+    будет предлагать заказы, которые еще не были предложены через "find_and_assign_driver".
+    Пока что, он дублирует функционал driver_accept_order.
+    """
+    await callback.answer("Используйте кнопки 'Принять' или 'Отказаться' в уведомлении о новом заказе.")
+    # Можно перенаправить на driver_accept_order или driver_reject_order
+    # Например:
+    # order_id = int(callback.data.split("_")[2])
+    # await driver_accept_order(callback) # Или driver_reject_order
 
 @router.callback_query(F.data == "driver_my_orders")
 async def driver_my_orders(callback: CallbackQuery):

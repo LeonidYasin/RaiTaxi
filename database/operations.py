@@ -48,6 +48,28 @@ class UserOperations:
             )
         return None
     
+    async def get_user_by_id(self, user_id: int) -> Optional[User]:
+        """Получение пользователя по внутреннему ID"""
+        query = 'SELECT * FROM users WHERE id = ?'
+        cursor = await self.db.execute(query, (user_id,))
+        row = cursor.fetchone()
+        
+        if row:
+            return User(
+                id=row['id'],
+                telegram_id=row['telegram_id'],
+                username=row['username'],
+                first_name=row['first_name'],
+                last_name=row['last_name'],
+                phone=row['phone'],
+                role=row['role'],
+                rating=row['rating'],
+                total_orders=row['total_orders'],
+                created_at=datetime.fromisoformat(row['created_at']),
+                is_active=bool(row['is_active'])
+            )
+        return None
+
     async def update_user_role(self, telegram_id: int, role: str) -> bool:
         """Обновление роли пользователя"""
         query = 'UPDATE users SET role = ? WHERE telegram_id = ?'
