@@ -438,10 +438,10 @@ async def handle_pickup_address(message: Message, state: FSMContext):
                 reply_markup=get_cancel_keyboard()
             )
     else:
-        print(f"DEBUG: Geocoding failed for pickup address: '{message.text}'") # Add debug print
+        # Removed debug print, replaced with logger.error in utils/maps.py
         await state.update_data(pickup_address="Неизвестно") # Ensure pickup_address is always set
         await message.answer(
-            "❌ Не удалось определить местоположение по адресу отправления. Пожалуйста, попробуйте еще раз, введя более точный адрес, или отправьте ваше местоположение с помощью кнопки.",
+            "❌ Не удалось определить местоположение по адресу отправления. Пожалуйста, попробуйте еще раз, введя более точный адрес (например, 'Москва, Тверская 1'), или отправьте ваше местоположение с помощью кнопки.",
             reply_markup=get_location_keyboard()
         )
         await message.answer(
@@ -533,9 +533,9 @@ async def handle_destination_address(message: Message, state: FSMContext):
     if geocoded_location:
         destination_lat, destination_lon = geocoded_location
     else:
-        print(f"DEBUG: Geocoding failed for destination address: '{destination_address}'") # Add debug print
+        # Removed debug print, replaced with logger.error in utils/maps.py
         await message.answer(
-            "❌ Не удалось определить местоположение по адресу назначения. Пожалуйста, попробуйте еще раз, введя более точный адрес.",
+            "❌ Не удалось определить местоположение по адресу назначения. Пожалуйста, попробуйте еще раз, введя более точный адрес (например, 'Москва, Ленина 10'), или отправьте ваше местоположение с помощью кнопки.",
             reply_markup=get_cancel_keyboard()
         )
         return # Stop processing if geocoding fails
