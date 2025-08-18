@@ -77,6 +77,13 @@ class UserOperations:
         await self.db.commit()
         return True
     
+    async def update_user_phone(self, telegram_id: int, phone: str) -> bool:
+        """Обновление номера телефона пользователя"""
+        query = 'UPDATE users SET phone = ? WHERE telegram_id = ?'
+        await self.db.execute(query, (phone, telegram_id))
+        await self.db.commit()
+        return True
+    
     async def get_all_users(self) -> List[User]:
         """Получение всех пользователей"""
         query = 'SELECT * FROM users ORDER BY created_at DESC'

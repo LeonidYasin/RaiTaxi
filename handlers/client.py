@@ -26,6 +26,7 @@ class TaxiOrderStates(StatesGroup):
     waiting_for_destination = State()
     confirming_order = State()
     searching_for_driver = State()
+    waiting_for_phone = State() # New state for phone number collection
 
 class DeliveryOrderStates(StatesGroup):
     """Состояния для заказа доставки"""
@@ -61,7 +62,17 @@ async def start_command(message: Message):
             first_name=user.first_name,
             last_name=user.last_name
         )
+        existing_user = await user_ops.get_user_by_telegram_id(user.id) # Re-fetch the created user
     
+    # Проверяем, есть ли у пользователя номер телефона
+    if not existing_user.phone:
+        await state.set_state(TaxiOrderStates.waiting_for_phone)
+        await message.answer(
+            "📞 Пожалуйста, поделитесь своим номером телефона, чтобы водители могли с вами связаться.",
+            reply_markup=get_phone_request_keyboard()
+        )
+        return # Stop processing here, wait for phone number
+
     # Проверяем, является ли пользователь водителем
     user_db_id = await user_ops.get_user_id_by_telegram_id(user.id)
     is_driver = False
@@ -783,6 +794,38 @@ async def driver_info_callback(callback: CallbackQuery, state: FSMContext):
 
 
 
+@router.message(TaxiOrderStates.waiting_for_phone, F.contact)
+async def handle_phone_number(message: Message, state: FSMContext):
+    """Обрабатывает полученный номер телефона"""
+    phone_number = message.contact.phone_number
+    user_id = message.from_user.id
+    
+    await user_ops.update_user_phone(user_id, phone_number) # Assuming this method exists
+    
+    await message.answer("✅ Спасибо! Ваш номер телефона сохранен.")
+    await state.clear()
+    await start_command(message) # Return to main menu
+
+@router.message(TaxiOrderStates.waiting_for_phone, F.text)
+async def handle_phone_number_text(message: Message, state: FSMContext):
+    """Обрабатывает введенный номер телефона (если пользователь не использовал кнопку)"""
+    phone_number = message.text.strip()
+    
+    # Простая валидация номера телефона
+    if not phone_number.startswith('+') or len(phone_number) < 10:
+        await message.answer(
+            "❌ Пожалуйста, введите корректный номер телефона, начиная с '+' (например, +79123456789), или используйте кнопку 'Поделиться номером телефона'.",
+            reply_markup=get_phone_request_keyboard()
+        )
+        return
+    
+    user_id = message.from_user.id
+    await user_ops.update_user_phone(user_id, phone_number) # Assuming this method exists
+    
+    await message.answer("✅ Спасибо! Ваш номер телефона сохранен.")
+    await state.clear()
+    await start_command(message) # Return to main menu
+
 @router.callback_query(F.data == "back_to_order")
 async def back_to_order_callback(callback: CallbackQuery, state: FSMContext):
     """Возврат к заказу"""
@@ -804,6 +847,9 @@ async def find_and_assign_driver(message: Message, order_id: int, state: FSMCont
         await message.answer("❌ Заказ не найден. Попробуйте создать новый.", reply_markup=get_main_menu_keyboard())
         await state.clear()
         return
+
+    client_user = await user_ops.get_user_by_id(order.client_id)
+    client_phone = client_user.phone if client_user else "Не указан"
 
     # Обновляем статус заказа на "searching_driver"
     await order_ops.update_order_status(order_id, Config.ORDER_STATUSES['searching_driver'])
@@ -843,12 +889,14 @@ async def find_and_assign_driver(message: Message, order_id: int, state: FSMCont
             f"🎯 Куда: {order.destination_address or f'{order.destination_lat:.4f}, {order.destination_lon:.4f}'}\n"
             f"📏 Расстояние: {PriceCalculator.format_distance(order.distance)}\n"
             f"💰 Стоимость: {PriceCalculator.format_price(order.price)}\n\n"
+            f"📞 Телефон клиента: {client_phone}\n\n"
             "Принять заказ?"
         )
         
         builder = InlineKeyboardBuilder()
         builder.button(text="✅ Принять", callback_data=f"driver_accept_order_{order.id}")
         builder.button(text="❌ Отказаться", callback_data=f"driver_reject_order_{order.id}")
+        builder.button(text="📞 Позвонить клиенту", url=f"tel:{client_phone}") # Add call button
         
         try:
             await bot.send_message(
@@ -886,6 +934,17 @@ async def find_and_assign_driver(message: Message, order_id: int, state: FSMCont
     await state.clear()
 
 # Вспомогательные функции для клавиатур
+def get_phone_request_keyboard():
+    """Клавиатура для запроса номера телефона"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📞 Поделиться номером телефона", request_contact=True)]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    return keyboard
+
 def get_cancel_keyboard():
     """Клавиатура с кнопкой отмены"""
     builder = InlineKeyboardBuilder()

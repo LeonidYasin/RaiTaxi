@@ -19,6 +19,7 @@ class DriverRegistrationStates(StatesGroup):
     waiting_for_car_model = State()
     waiting_for_car_number = State()
     waiting_for_license = State()
+    waiting_for_phone = State() # New state for phone number collection
     confirming_registration = State()
 
 class DriverOrderStates(StatesGroup):
@@ -207,16 +208,61 @@ async def handle_license(message: Message, state: FSMContext):
         return
     
     await state.update_data(license_number=license_number)
-    await state.set_state(DriverRegistrationStates.confirming_registration)
+    await state.set_state(DriverRegistrationStates.waiting_for_phone)
     
+    await message.answer(
+        "📞 Пожалуйста, поделитесь своим номером телефона, чтобы клиенты могли с вами связаться.",
+        reply_markup=get_phone_request_keyboard()
+    )
+
+@router.message(DriverRegistrationStates.waiting_for_phone, F.contact)
+async def handle_driver_phone_number(message: Message, state: FSMContext):
+    """Обрабатывает полученный номер телефона водителя"""
+    phone_number = message.contact.phone_number
+    user_id = message.from_user.id
+    
+    await user_ops.update_user_phone(user_id, phone_number)
+    
+    # Now proceed to confirmation
     data = await state.get_data()
     
     confirm_text = "📋 Подтвердите данные регистрации:\n\n"
     confirm_text += f"🚙 Автомобиль: {data['car_model']}\n"
     confirm_text += f"🚗 Номер: {data['car_number']}\n"
-    confirm_text += f"📋 ВУ: {data['license_number']}\n\n"
+    confirm_text += f"📋 ВУ: {data['license_number']}\n"
+    confirm_text += f"📞 Телефон: {phone_number}\n\n"
     confirm_text += "Все верно?"
     
+    await state.set_state(DriverRegistrationStates.confirming_registration)
+    await message.answer(confirm_text, reply_markup=get_confirm_registration_keyboard())
+
+@router.message(DriverRegistrationStates.waiting_for_phone, F.text)
+async def handle_driver_phone_number_text(message: Message, state: FSMContext):
+    """Обрабатывает введенный номер телефона водителя (если пользователь не использовал кнопку)"""
+    phone_number = message.text.strip()
+    
+    # Простая валидация номера телефона
+    if not phone_number.startswith('+') or len(phone_number) < 10:
+        await message.answer(
+            "❌ Пожалуйста, введите корректный номер телефона, начиная с '+' (например, +79123456789), или используйте кнопку 'Поделиться номером телефона'.",
+            reply_markup=get_phone_request_keyboard()
+        )
+        return
+    
+    user_id = message.from_user.id
+    await user_ops.update_user_phone(user_id, phone_number)
+    
+    # Now proceed to confirmation
+    data = await state.get_data()
+    
+    confirm_text = "📋 Подтвердите данные регистрации:\n\n"
+    confirm_text += f"🚙 Автомобиль: {data['car_model']}\n"
+    confirm_text += f"🚗 Номер: {data['car_number']}\n"
+    confirm_text += f"📋 ВУ: {data['license_number']}\n"
+    confirm_text += f"📞 Телефон: {phone_number}\n\n"
+    confirm_text += "Все верно?"
+    
+    await state.set_state(DriverRegistrationStates.confirming_registration)
     await message.answer(confirm_text, reply_markup=get_confirm_registration_keyboard())
 
 @router.callback_query(F.data == "confirm_driver_registration")
@@ -393,11 +439,24 @@ async def driver_accept_order(callback: CallbackQuery):
             await callback.answer("✅ Заказ принят!")
             order = await order_ops.get_order_by_id(order_id)
             client_user = await user_ops.get_user_by_id(order.client_id)
+            driver_user = await user_ops.get_user_by_id(user_db_id) # Get driver's user object
+            
+            driver_phone = driver_user.phone if driver_user else "Не указан"
             
             if client_user and client_user.telegram_id:
+                client_message_text = (
+                    f"✅ Ваш заказ #{order.id} принят водителем!\n\n"
+                    f"🚗 Водитель: {driver_user.first_name} ({driver_user.username or 'без username'})\n"
+                    f"📞 Телефон водителя: {driver_phone}\n"
+                    f"🚙 Автомобиль: {driver.car_model} ({driver.car_number})\n\n"
+                    "Водитель скоро свяжется с вами."
+                )
+                builder = InlineKeyboardBuilder()
+                builder.button(text="📞 Позвонить водителю", url=f"tel:{driver_phone}")
                 await bot.send_message(
                     chat_id=client_user.telegram_id,
-                    text=f"✅ Ваш заказ #{order.id} принят водителем! Водитель скоро свяжется с вами."
+                    text=client_message_text,
+                    reply_markup=builder.as_markup()
                 )
             
             # Обновляем сообщение для водителя
@@ -407,6 +466,7 @@ async def driver_accept_order(callback: CallbackQuery):
                 f"🎯 Куда: {order.destination_address or f'{order.destination_lat:.4f}, {order.destination_lon:.4f}'}\n"
                 f"💰 Стоимость: {order.price:.0f} ₽\n"
                 f"📏 Расстояние: {order.distance:.1f} км\n\n"
+                f"📞 Телефон клиента: {client_user.phone if client_user else 'Не указан'}\n\n"
                 "📱 Свяжитесь с клиентом для уточнения деталей."
             )
             # Optionally, update driver's availability to busy
@@ -598,6 +658,17 @@ async def back_to_main(callback: CallbackQuery):
     await start_command(callback.message)
 
 # Вспомогательные функции для клавиатур
+def get_phone_request_keyboard():
+    """Клавиатура для запроса номера телефона"""
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📞 Поделиться номером телефона", request_contact=True)]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+    return keyboard
+
 def get_cancel_keyboard():
     """Клавиатура с кнопкой отмены"""
     builder = InlineKeyboardBuilder()
