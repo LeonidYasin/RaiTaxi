@@ -17,7 +17,7 @@ class Config:
     
     # Карты
     OSM_STATIC_MAPS_URL = os.getenv('OSM_STATIC_MAPS_URL',
-                                   'https://www.openstreetmap.org/export/staticmap.php')
+                                   'https://staticmap.openstreetmap.de/staticmap.php')
     NOMINATIM_URL = os.getenv('NOMINATIM_URL', 'https://nominatim.openstreetmap.org')
     MAP_WIDTH = 600
     MAP_HEIGHT = 400

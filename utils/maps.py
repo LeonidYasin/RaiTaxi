@@ -138,8 +138,16 @@ class MapService:
             
             return response.content
             
+        except requests.exceptions.RequestException as e:
+            if isinstance(e, requests.exceptions.ConnectionError) and "NameResolutionError" in str(e):
+                logger.error(f"Ошибка получения карты: Не удалось разрешить доменное имя '{self.base_url}'. Проверьте подключение к интернету, настройки DNS или брандмауэр. Детали: {e}")
+            elif isinstance(e, requests.exceptions.HTTPError) and e.response.status_code == 404:
+                logger.error(f"Ошибка получения карты: Ресурс не найден (404). Возможно, URL статического сервиса карт некорректен. Текущий URL: {self.base_url}. Детали: {e}")
+            else:
+                logger.error(f"Ошибка получения карты: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Ошибка получения карты: {e}")
+            logger.error(f"Неизвестная ошибка при получении карты: {e}")
             return None
     
     def create_simple_map(self, pickup_lat: float, pickup_lon: float,
